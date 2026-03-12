@@ -11,7 +11,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import Swal from "sweetalert2";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx/xlsx.mjs";
 
 export default function UserGroups() {
 
