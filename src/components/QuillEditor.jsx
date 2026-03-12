@@ -18,13 +18,23 @@ export default function QuillEditor({ value, onChange }) {
   });
 
   useEffect(() => {
-    if (quill) {
-      quill.root.innerHTML = value || "";
+    if (!quill) return;
 
-      quill.on("text-change", () => {
-        onChange(quill.root.innerHTML);
-      });
+    // Set initial value
+    if (value) {
+      quill.root.innerHTML = value;
     }
+
+    // Handle changes
+    const handler = () => {
+      onChange(quill.root.innerHTML);
+    };
+
+    quill.on("text-change", handler);
+
+    return () => {
+      quill.off("text-change", handler);
+    };
   }, [quill]);
 
   return <div ref={quillRef} />;
