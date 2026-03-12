@@ -7,4 +7,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+
+  optimizeDeps: {
+    include: ["quill", "react-quilljs", "xlsx"]
+  },
+
+  build: {
+    commonjsOptions: {
+      transformMixedEsModules: true
+    }
+  }
 });
