@@ -12,7 +12,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Swal from "sweetalert2";
 import QuillEditor from "./QuillEditor";
-import * as XLSX from "xlsx/xlsx.mjs";
+import * as XLSX from "xlsx";
 
 const ITEMS_PER_PAGE = 20;
 
