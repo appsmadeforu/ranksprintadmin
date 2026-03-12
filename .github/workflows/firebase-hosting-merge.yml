@@ -10,22 +10,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repository
+      # Checkout repo
       - uses: actions/checkout@v4
 
       # Setup Node
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
-      # Install dependencies
-      - run: npm install
+      # Install dependencies (including dev)
+      - run: npm install --include=dev
 
-      # Build Vite project
+      # Build Vite
       - run: npm run build
 
-      # Deploy to Firebase
+      # Deploy Firebase
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
