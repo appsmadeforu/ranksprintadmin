@@ -13,6 +13,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Swal from "sweetalert2";
 import QuillEditor from "./QuillEditor";
 import * as XLSX from "xlsx/xlsx.mjs";
+import ImageDropZone from "./ImageDropZone";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -764,11 +765,10 @@ export default function QuestionsManager({
             {/* QUESTION IMAGE */}
             <div>
               <label className="font-medium block mb-2">Question Image (optional)</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setQuestionImage(e.target.files[0])}
-                className="border p-2 rounded w-full"
+              <ImageDropZone
+                image={questionImage}
+                setImage={setQuestionImage}
+                label="Question Image"
               />
               {questionImage && (
                 <p className="text-sm text-green-600 mt-1">File selected: {questionImage.name}</p>
@@ -820,15 +820,14 @@ export default function QuestionsManager({
                   {/* OPTION IMAGE */}
                   <div>
                     <label className="text-sm text-gray-600 block mb-2">Option Image (optional)</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
+                    <ImageDropZone
+                      image={optionImages[index]}
+                      setImage={(file) => {
                         const newImages = [...optionImages];
-                        newImages[index] = e.target.files[0];
+                        newImages[index] = file;
                         setOptionImages(newImages);
                       }}
-                      className="border p-2 rounded w-full text-sm"
+                      label={`Option ${index + 1} Image`}
                     />
                     {optionImages[index] && (
                       <p className="text-sm text-green-600 mt-1">
@@ -859,11 +858,10 @@ export default function QuestionsManager({
             {/* EXPLANATION IMAGE */}
             <div>
               <label className="font-medium block mb-2">Explanation Image (optional)</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setExplanationImage(e.target.files[0])}
-                className="border p-2 rounded w-full"
+              <ImageDropZone
+                image={explanationImage}
+                setImage={setExplanationImage}
+                label="Explanation Image"
               />
               {explanationImage && (
                 <p className="text-sm text-green-600 mt-1">File selected: {explanationImage.name}</p>
