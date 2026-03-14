@@ -1,6 +1,11 @@
 import { useRef } from "react";
 
-export default function ImageDropZone({ image, setImage, label }) {
+export default function ImageDropZone({
+    image,
+    setImage,
+    existingImage,
+    label
+}) {
     const inputRef = useRef();
 
     const handleDrop = (e) => {
@@ -26,7 +31,9 @@ export default function ImageDropZone({ image, setImage, label }) {
         if (file) setImage(file);
     };
 
-    const preview = image ? URL.createObjectURL(image) : null;
+    const preview = image
+        ? URL.createObjectURL(image)
+        : existingImage || null;
 
     return (
         <div

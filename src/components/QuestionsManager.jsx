@@ -565,10 +565,24 @@ export default function QuestionsManager({
                     />
                   </td>
                   <td className="p-3 w-80">
-                    <div
-                      dangerouslySetInnerHTML={{ __html: q.questionText }}
-                      className="line-clamp-3 text-sm"
-                    />
+                    <div className="space-y-2">
+
+                      {q.questionText && (
+                        <div
+                          dangerouslySetInnerHTML={{ __html: q.questionText }}
+                          className="line-clamp-3 text-sm"
+                        />
+                      )}
+
+                      {q.questionImageUrl && (
+                        <img
+                          src={q.questionImageUrl}
+                          alt="question"
+                          className="max-h-20 rounded border"
+                        />
+                      )}
+
+                    </div>
                   </td>
                   <td className="p-3 w-32 text-sm truncate">
                     {(sections || []).find(s => s.id === q.sectionId)?.name || "-"}
@@ -768,6 +782,7 @@ export default function QuestionsManager({
               <ImageDropZone
                 image={questionImage}
                 setImage={setQuestionImage}
+                existingImage={editingQuestion?.questionImageUrl}
                 label="Question Image"
               />
               {questionImage && (
@@ -822,6 +837,7 @@ export default function QuestionsManager({
                     <label className="text-sm text-gray-600 block mb-2">Option Image (optional)</label>
                     <ImageDropZone
                       image={optionImages[index]}
+                      existingImage={opt.imageUrl}
                       setImage={(file) => {
                         const newImages = [...optionImages];
                         newImages[index] = file;
@@ -861,6 +877,7 @@ export default function QuestionsManager({
               <ImageDropZone
                 image={explanationImage}
                 setImage={setExplanationImage}
+                existingImage={editingQuestion?.explanationImageUrl}
                 label="Explanation Image"
               />
               {explanationImage && (
