@@ -22,6 +22,7 @@ export default function QuestionsManager({
   sections = [],
 }) {
   const [questions, setQuestions] = useState([]);
+  const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [subjects, setSubjects] = useState([]);
@@ -255,6 +256,70 @@ export default function QuestionsManager({
     Swal.fire("Deleted", "Question removed", "success");
   };
 
+  const deleteSelectedQuestions = async () => {
+    if (selectedQuestions.length === 0) {
+      return Swal.fire("No selection", "Select questions first", "warning");
+    }
+
+    const confirm = await Swal.fire({
+      title: "Delete Selected Questions?",
+      text: `${selectedQuestions.length} questions will be deleted`,
+      icon: "warning",
+      showCancelButton: true,
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      for (let id of selectedQuestions) {
+        await deleteDoc(
+          doc(db, "exams", examId, "tests", testId, "questions", id)
+        );
+      }
+
+      setSelectedQuestions([]);
+
+      Swal.fire("Deleted", "Selected questions removed", "success");
+    } catch (err) {
+      Swal.fire("Error", err.message, "error");
+    }
+  };
+
+  const deleteFilteredQuestions = async () => {
+    if (filteredQuestions.length === 0) {
+      return Swal.fire("Nothing to delete", "", "info");
+    }
+
+    const confirm = await Swal.fire({
+      title: "Delete Filtered Questions?",
+      text: `${filteredQuestions.length} questions will be deleted`,
+      icon: "warning",
+      showCancelButton: true,
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      for (let q of filteredQuestions) {
+        await deleteDoc(
+          doc(db, "exams", examId, "tests", testId, "questions", q.id)
+        );
+      }
+
+      Swal.fire("Deleted", "Filtered questions removed", "success");
+    } catch (err) {
+      Swal.fire("Error", err.message, "error");
+    }
+  };
+
+  const toggleQuestion = (id) => {
+    setSelectedQuestions((prev) =>
+      prev.includes(id)
+        ? prev.filter((q) => q !== id)
+        : [...prev, id]
+    );
+  };
+
   /* ---------------- BULK JSON ADD ---------------- */
   const handleBulkSave = async () => {
     try {
@@ -347,11 +412,19 @@ export default function QuestionsManager({
         </h3>
 
         <div className="flex gap-3">
+
           <button
-            onClick={() => setBulkMode(true)}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
+            onClick={deleteSelectedQuestions}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
           >
-            Bulk Add
+            Delete Selected
+          </button>
+
+          <button
+            onClick={deleteFilteredQuestions}
+            className="bg-red-800 text-white px-4 py-2 rounded hover:bg-red-900 transition"
+          >
+            Delete Filtered
           </button>
 
           <label className="bg-blue-600 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-700 transition">
@@ -470,6 +543,7 @@ export default function QuestionsManager({
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-200">
             <tr>
+              <th className="p-3 w-10">Select</th>
               <th className="p-3 w-80">Question</th>
               <th className="p-3 w-32">Section</th>
               <th className="p-3 w-28">Subject</th>
@@ -482,9 +556,16 @@ export default function QuestionsManager({
             {paginatedQuestions.length > 0 ? (
               paginatedQuestions.map((q) => (
                 <tr key={q.id} className="border-t hover:bg-slate-50 transition">
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedQuestions.includes(q.id)}
+                      onChange={() => toggleQuestion(q.id)}
+                    />
+                  </td>
                   <td className="p-3 w-80">
-                    <div 
-                      dangerouslySetInnerHTML={{ __html: q.questionText }} 
+                    <div
+                      dangerouslySetInnerHTML={{ __html: q.questionText }}
                       className="line-clamp-3 text-sm"
                     />
                   </td>
@@ -494,11 +575,10 @@ export default function QuestionsManager({
                   <td className="p-3 w-28 text-sm truncate">{q.subject || "-"}</td>
                   <td className="p-3 w-28 text-sm truncate">{q.chapter || "-"}</td>
                   <td className="p-3 w-20 text-sm">
-                    <span className={`px-2 py-1 rounded text-xs font-medium inline-block ${
-                      q.difficulty === "easy" ? "bg-green-100 text-green-700" :
+                    <span className={`px-2 py-1 rounded text-xs font-medium inline-block ${q.difficulty === "easy" ? "bg-green-100 text-green-700" :
                       q.difficulty === "medium" ? "bg-yellow-100 text-yellow-700" :
-                      "bg-red-100 text-red-700"
-                    }`}>
+                        "bg-red-100 text-red-700"
+                      }`}>
                       {q.difficulty}
                     </span>
                   </td>
@@ -536,11 +616,10 @@ export default function QuestionsManager({
             <button
               key={i}
               onClick={() => setCurrentPage(i + 1)}
-              className={`px-3 py-1 rounded transition font-medium ${
-                currentPage === i + 1
-                  ? "bg-indigo-600 text-white"
-                  : "bg-white border hover:bg-slate-50"
-              }`}
+              className={`px-3 py-1 rounded transition font-medium ${currentPage === i + 1
+                ? "bg-indigo-600 text-white"
+                : "bg-white border hover:bg-slate-50"
+                }`}
             >
               {i + 1}
             </button>
