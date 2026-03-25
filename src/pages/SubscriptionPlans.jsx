@@ -15,7 +15,7 @@ import {
 import Swal from "sweetalert2";
 import { logActivity } from "../utils/logActivity";
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 20;
 
 export default function SubscriptionPlans() {
   const [plans, setPlans] = useState([]);

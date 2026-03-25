@@ -34,7 +34,7 @@ export default function PyqsManager({ examId }) {
     const [filterSubject, setFilterSubject] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
 
-    const ITEMS_PER_PAGE = 5;
+    const ITEMS_PER_PAGE = 20;
     const [currentPage, setCurrentPage] = useState(1);
 
     /* ---------------- FETCH SUBJECTS ---------------- */

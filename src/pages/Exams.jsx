@@ -12,7 +12,7 @@ import {
 import { logActivity } from "../utils/logActivity";
 import Swal from "sweetalert2";
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 20;
 
 export default function Exams() {
   const [exams, setExams] = useState([]);

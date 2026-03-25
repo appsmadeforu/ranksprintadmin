@@ -37,6 +37,7 @@ export default function PyqsManager({ examId }) {
 
     const [filterSubject, setFilterSubject] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
+    const [filterExam, setFilterExam] = useState("");
 
     const ITEMS_PER_PAGE = 20;
     const [currentPage, setCurrentPage] = useState(1);
@@ -132,7 +133,13 @@ export default function PyqsManager({ examId }) {
 
     const filteredData = useMemo(() => {
         return allChapters.filter(item => {
-            const matchesSubject = filterSubject ? item.subjectId === filterSubject : true;
+
+            const matchesExam =
+                filterExam ? item.examId === filterExam : true;
+
+            const matchesSubject =
+                filterSubject ? item.subjectId === filterSubject : true;
+
             const matchesSearch =
                 item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 item.subjectName?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -145,9 +152,23 @@ export default function PyqsManager({ examId }) {
             const matchesStatus =
                 filterStatus ? item.status === filterStatus : true;
 
-            return matchesSubject && matchesSearch && matchesLock && matchesStatus;
+            return (
+                matchesExam &&
+                matchesSubject &&
+                matchesSearch &&
+                matchesLock &&
+                matchesStatus
+            );
+
         });
-    }, [allChapters, filterSubject, searchTerm, filterLock, filterStatus]);
+    }, [
+        allChapters,
+        filterExam,
+        filterSubject,
+        searchTerm,
+        filterLock,
+        filterStatus
+    ]);
 
     const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
 
@@ -354,11 +375,36 @@ export default function PyqsManager({ examId }) {
 
             {/* FILTERS */}
             <div className="bg-white p-4 rounded-xl shadow mb-6 flex gap-4 flex-wrap">
+
+                {/* Exam Filter */}
+                <div>
+                    <label className="block text-sm font-medium">
+                        Filter by Exam
+                    </label>
+
+                    <select
+                        className="border p-2 rounded w-[180px]"
+                        value={filterExam}
+                        onChange={(e) => {
+                            setFilterExam(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                    >
+                        <option value="">All Exams</option>
+
+                        {exams.map(exam => (
+                            <option key={exam.id} value={exam.id}>
+                                {exam.name}
+                            </option>
+                        ))}
+
+                    </select>
+                </div>
                 {/* Subject Filter */}
                 <div>
                     <label className="block text-sm font-medium">Filter by Subject</label>
                     <select
-                        className="border p-2 rounded"
+                        className="border p-2 rounded w-[180px]"
                         value={filterSubject}
                         onChange={(e) => {
                             setFilterSubject(e.target.value);
@@ -373,7 +419,7 @@ export default function PyqsManager({ examId }) {
                 </div>
 
                 {/* Search */}
-                <div className="flex-1 min-w-[200px]">
+                <div className="w-[220px]">
                     <label className="block text-sm font-medium">Search</label>
                     <input
                         className="border p-2 rounded w-full"

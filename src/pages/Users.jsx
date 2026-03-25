@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 import Swal from "sweetalert2";
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 20;
 
 export default function Users() {
   const [users, setUsers] = useState([]);
