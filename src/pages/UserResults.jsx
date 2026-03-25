@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { db } from "../firebase";
 import {
   collection,
-  onSnapshot,
+  onSnapshot
 } from "firebase/firestore";
 
 export default function UserResults() {
@@ -10,244 +10,506 @@ export default function UserResults() {
   const [results, setResults] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [examsMap, setExamsMap] = useState({});
+  const [testsMap, setTestsMap] = useState({});
+
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+
   const [examFilter, setExamFilter] = useState("");
+  const [testFilter, setTestFilter] = useState("");
+  const [attemptFilter, setAttemptFilter] = useState("");
+  const [rankFilter, setRankFilter] = useState("");
+  const [scoreFilter, setScoreFilter] = useState("");
+  const [sortType, setSortType] = useState("");
 
   /* ---------------- FETCH RESULTS ---------------- */
+
   useEffect(() => {
+
     const unsub = onSnapshot(
       collection(db, "results"),
-      (snapshot) => {
+      snap => {
         setResults(
-          snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
+          snap.docs.map(d => ({
+            id: d.id,
+            ...d.data()
           }))
         );
       }
     );
+
     return () => unsub();
+
   }, []);
 
-  /* ---------------- FETCH USERS ---------------- */
+  /* ---------------- USERS ---------------- */
+
   useEffect(() => {
+
     const unsub = onSnapshot(
       collection(db, "users"),
-      (snapshot) => {
+      snap => {
         const map = {};
-        snapshot.docs.forEach(doc => {
-          map[doc.id] = doc.data();
+        snap.docs.forEach(d => {
+          map[d.id] = d.data();
         });
         setUsersMap(map);
       }
     );
+
     return () => unsub();
+
   }, []);
 
-  /* ---------------- FETCH EXAMS ---------------- */
+  /* ---------------- EXAMS + TESTS ---------------- */
+
   useEffect(() => {
+
     const unsub = onSnapshot(
       collection(db, "exams"),
       (snapshot) => {
-        const map = {};
+
+        const examMap = {};
+
         snapshot.docs.forEach(doc => {
-          map[doc.id] = doc.data().name;
+          examMap[doc.id] = doc.data().name;
         });
-        setExamsMap(map);
+
+        setExamsMap(examMap);
+
+        /* LOAD TESTS PER EXAM */
+
+        snapshot.docs.forEach(examDoc => {
+
+          const examId = examDoc.id;
+
+          onSnapshot(
+            collection(
+              db,
+              "exams",
+              examId,
+              "tests"
+            ),
+            (testSnap) => {
+
+              const testList = {};
+
+              testSnap.docs.forEach(t => {
+
+                testList[t.id] =
+                  t.data().name;
+
+              });
+
+              setTestsMap(prev => ({
+                ...prev,
+                [examId]: testList
+              }));
+
+            }
+          );
+
+        });
+
       }
     );
+
     return () => unsub();
+
   }, []);
 
-  /* ---------------- SEARCH ---------------- */
+  /* ---------------- FILTER + SORT ---------------- */
+
   const filtered = useMemo(() => {
-    return results.filter(r => {
-      const user = usersMap[r.userId];
-      const name = user?.name?.toLowerCase() || "";
-      const email = user?.email?.toLowerCase() || "";
 
-      const matchesSearch =
-        name.includes(search.toLowerCase()) ||
-        email.includes(search.toLowerCase());
+    let data = results.filter(r => {
 
-      const matchesExam =
-        !examFilter || r.examId === examFilter;
+      const u = usersMap[r.userId];
 
-      return matchesSearch && matchesExam;
+      const name = u?.name?.toLowerCase() || "";
+      const email = u?.email?.toLowerCase() || "";
+
+      return (
+
+        (!search ||
+          name.includes(search.toLowerCase()) ||
+          email.includes(search.toLowerCase())
+        )
+
+        && (!examFilter ||
+          r.examId === examFilter)
+
+        && (!testFilter ||
+          r.testId === testFilter)
+
+        && (!attemptFilter ||
+          String(r.attemptNumber) === attemptFilter)
+
+        && (!rankFilter ||
+          r.rank <= Number(rankFilter))
+
+        && (!scoreFilter ||
+          r.score >= Number(scoreFilter))
+
+      );
+
     });
-  }, [results, search, usersMap, examFilter]);
+
+    if (sortType === "rank")
+      data.sort((a, b) => a.rank - b.rank);
+
+    if (sortType === "score")
+      data.sort((a, b) => b.score - a.score);
+
+    return data;
+
+  }, [
+    results,
+    usersMap,
+    search,
+    examFilter,
+    testFilter,
+    attemptFilter,
+    rankFilter,
+    scoreFilter,
+    sortType
+  ]);
+
+  /* ---------------- UI ---------------- */
 
   return (
+
     <div className="p-10 bg-slate-100 min-h-screen">
 
       <h2 className="text-3xl font-bold mb-6">
         User Results
       </h2>
 
-      <div className="flex gap-4 mb-6">
+      {/* FILTERS */}
+
+      <div className="flex flex-wrap gap-4 mb-6">
 
         <input
-          type="text"
           placeholder="Search user..."
           className="border p-3 rounded-lg w-72"
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
         />
+
+        {/* EXAM */}
 
         <select
           value={examFilter}
-          onChange={(e) => setExamFilter(e.target.value)}
+          onChange={(e) => {
+            setExamFilter(e.target.value);
+            setTestFilter("");
+          }}
           className="border p-3 rounded-lg bg-white"
         >
-          <option value="">All Exams</option>
 
-          {Object.entries(examsMap).map(([examId, examName]) => (
-            <option key={examId} value={examId}>
-              {examName}
+          <option value="">
+            All Exams
+          </option>
+
+          {Object.entries(examsMap)
+            .map(([id, name]) => (
+
+              <option key={id} value={id}>
+                {name}
+              </option>
+
+            ))}
+
+        </select>
+
+        {/* TEST */}
+
+        <select
+          value={testFilter}
+          onChange={(e) =>
+            setTestFilter(e.target.value)
+          }
+          className="border p-3 rounded-lg bg-white"
+        >
+
+          <option value="">
+            All Tests
+          </option>
+
+          {Object.entries(
+
+            examFilter
+              ? testsMap[examFilter] || {}
+
+              : Object.values(testsMap)
+                .reduce(
+                  (acc, tests) => ({
+                    ...acc,
+                    ...tests
+                  }),
+                  {}
+                )
+
+          ).map(([id, name]) => (
+
+            <option key={id} value={id}>
+              {name}
             </option>
+
           ))}
+
+        </select>
+
+        {/* ATTEMPT */}
+
+        <select
+          value={attemptFilter}
+          onChange={e => setAttemptFilter(e.target.value)}
+          className="border p-3 rounded-lg bg-white"
+        >
+
+          <option value="">
+            All Attempts
+          </option>
+
+          <option value="1">Attempt 1</option>
+          <option value="2">Attempt 2</option>
+          <option value="3">Attempt 3</option>
+
+        </select>
+
+        {/* RANK */}
+
+        <select
+          value={rankFilter}
+          onChange={e => setRankFilter(e.target.value)}
+          className="border p-3 rounded-lg bg-white"
+        >
+
+          <option value="">
+            Top Rank
+          </option>
+
+          <option value="10">Top 10</option>
+          <option value="50">Top 50</option>
+          <option value="100">Top 100</option>
+
+        </select>
+
+        {/* SCORE */}
+
+        <select
+          value={scoreFilter}
+          onChange={e => setScoreFilter(e.target.value)}
+          className="border p-3 rounded-lg bg-white"
+        >
+
+          <option value="">
+            Min Score
+          </option>
+
+          <option value="10">10+</option>
+          <option value="20">20+</option>
+          <option value="40">40+</option>
+          <option value="60">60+</option>
+
+        </select>
+
+        {/* SORT */}
+
+        <select
+          value={sortType}
+          onChange={e => setSortType(e.target.value)}
+          className="border p-3 rounded-lg bg-white"
+        >
+
+          <option value="">
+            Sort
+          </option>
+
+          <option value="rank">
+            Sort by Rank
+          </option>
+
+          <option value="score">
+            Sort by Score
+          </option>
 
         </select>
 
       </div>
 
+      {/* RESULTS */}
+
       <div className="space-y-4">
-        {filtered.map(result => {
-          const user = usersMap[result.userId];
+
+        {filtered.map(r => {
+
+          const u = usersMap[r.userId];
+
+          const total =
+            r.correct +
+            r.incorrect +
+            r.unanswered;
+
+          const accuracy =
+            total > 0
+              ? Math.round(
+                (r.correct / total) * 100
+              )
+              : 0;
 
           return (
+
             <div
-              key={result.id}
-              className="bg-white rounded-xl shadow hover:shadow-lg transition"
+              key={r.id}
+              className="bg-white rounded-xl shadow hover:shadow-lg"
             >
 
-              {/* MAIN SUMMARY */}
+              {/* MAIN */}
+
               <div
-                onClick={() =>
-                  setExpandedId(
-                    expandedId === result.id ? null : result.id
-                  )
-                }
+                onClick={() => setExpandedId(
+                  expandedId === r.id ? null : r.id
+                )}
                 className="p-6 cursor-pointer flex justify-between items-center"
               >
 
                 <div>
+
                   <p className="font-bold text-lg">
-                    {user?.name || "Unknown User"}
+                    {u?.name || "Unknown"}
                   </p>
+
                   <p className="text-sm text-slate-500">
-                    {user?.email}
+                    {u?.email}
                   </p>
+
                   <p className="text-sm text-slate-600 mt-1">
-                    {examsMap[result.examId] || result.examId}
+                    {examsMap[r.examId]}
                   </p>
+
+                  <p className="text-xs text-slate-400">
+                    {testsMap[r.examId]?.[r.testId]}
+                    {" | "}
+                    Attempt {r.attemptNumber}
+                  </p>
+
                 </div>
 
                 <div className="text-right">
+
                   <p className="text-2xl font-bold text-indigo-600">
-                    {result.score}
+                    {r.score}
                   </p>
+
                   <p className="text-xs text-slate-500">
                     Score
                   </p>
+
                 </div>
 
               </div>
 
-              {/* EXPANDED DETAILS */}
-              {expandedId === result.id && (
+              {/* EXPANDED */}
+
+              {expandedId === r.id && (
+
                 <div className="border-t p-6 bg-slate-50">
 
-                  {/* TOP STATS */}
-                  <div className="grid grid-cols-4 gap-6 mb-6">
+                  <div className="grid grid-cols-5 gap-6 mb-6">
 
-                    <StatCard
-                      label="Correct"
-                      value={result.correct}
-                      color="green"
-                    />
+                    <StatCard label="Correct" value={r.correct} color="green" />
 
-                    <StatCard
-                      label="Incorrect"
-                      value={result.incorrect}
-                      color="red"
-                    />
+                    <StatCard label="Incorrect" value={r.incorrect} color="red" />
 
-                    <StatCard
-                      label="Unanswered"
-                      value={result.unanswered}
-                      color="yellow"
-                    />
+                    <StatCard label="Unanswered" value={r.unanswered} color="yellow" />
 
-                    <StatCard
-                      label="Percentile"
-                      value={`${result.percentile}%`}
-                      color="blue"
-                    />
+                    <StatCard label="Percentile" value={`${r.percentile}%`} color="blue" />
+
+                    <StatCard label="Accuracy" value={`${accuracy}%`} color="purple" />
 
                   </div>
 
-                  {/* RANK */}
-                  <div className="mb-6">
-                    <div className="bg-white p-4 rounded-lg shadow-sm border flex justify-between items-center">
-                      <span className="text-slate-600 font-medium">
-                        Rank
-                      </span>
-                      <span className="text-2xl font-bold text-purple-600">
-                        #{result.rank}
-                      </span>
-                    </div>
+                  <div className="bg-white p-4 rounded-lg border flex justify-between items-center">
+
+                    <span className="text-slate-600 font-medium">
+                      Rank
+                    </span>
+
+                    <span className="text-2xl font-bold text-purple-600">
+                      #{r.rank}
+                    </span>
+
                   </div>
 
-                  {/* SECTION WISE */}
-                  {result.sectionWise && result.sectionWise.length > 0 && (
-                    <div>
+                  {r.sectionWise?.length > 0 && (
+
+                    <div className="mt-6">
+
                       <h4 className="font-semibold mb-3">
                         Section Wise Performance
                       </h4>
 
                       <div className="space-y-3">
-                        {result.sectionWise.map((sec, idx) => (
-                          <div
-                            key={idx}
-                            className="bg-white p-4 rounded-lg border"
-                          >
+
+                        {r.sectionWise.map((s, i) => (
+
+                          <div key={i} className="bg-white p-4 rounded-lg border">
+
                             <p className="font-medium">
-                              {sec.sectionName}
+                              {s.sectionName}
                             </p>
 
                             <div className="flex gap-6 text-sm mt-2 text-slate-600">
-                              <span>Score: {sec.score}</span>
-                              <span>Correct: {sec.correct}</span>
-                              <span>Incorrect: {sec.incorrect}</span>
-                              <span>Unanswered: {sec.unanswered}</span>
+
+                              <span>Score: {s.score}</span>
+                              <span>Correct: {s.correct}</span>
+                              <span>Incorrect: {s.incorrect}</span>
+                              <span>Unanswered: {s.unanswered}</span>
+
                             </div>
+
                           </div>
+
                         ))}
+
                       </div>
+
                     </div>
+
                   )}
 
                   <div className="mt-4 text-xs text-slate-500">
+
                     Created At:{" "}
-                    {result.createdAt
+
+                    {r.createdAt
                       ? new Date(
-                        result.createdAt.toDate()
+                        r.createdAt.toDate()
                       ).toLocaleString()
                       : "-"}
+
                   </div>
 
                 </div>
+
               )}
+
             </div>
+
           );
+
         })}
+
       </div>
+
     </div>
+
   );
+
 }
 
-/* ---------------- SMALL COMPONENTS ---------------- */
+/* ---------------- STAT CARD ---------------- */
 
 function StatCard({ label, value, color }) {
 
@@ -256,16 +518,23 @@ function StatCard({ label, value, color }) {
     red: "bg-red-100 text-red-700",
     yellow: "bg-yellow-100 text-yellow-700",
     blue: "bg-blue-100 text-blue-700",
+    purple: "bg-purple-100 text-purple-700"
   };
 
   return (
+
     <div className="bg-white p-4 rounded-lg border shadow-sm text-center">
+
       <p className="text-xs text-slate-500 uppercase mb-1">
         {label}
       </p>
+
       <p className={`text-xl font-bold px-3 py-1 rounded-full inline-block ${colors[color]}`}>
         {value}
       </p>
+
     </div>
+
   );
+
 }

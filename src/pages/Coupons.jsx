@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { logActivity } from "../utils/logActivity";
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 20;
 
 export default function Coupons() {
   const [coupons, setCoupons] = useState([]);
