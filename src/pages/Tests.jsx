@@ -132,6 +132,8 @@ export default function Tests() {
                 <th className="p-3">Type</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Duration</th>
+                <th className="p-3">Start</th>
+                <th className="p-3">End</th>
                 <th className="p-3">Actions</th>
               </tr>
             </thead>
@@ -154,6 +156,20 @@ export default function Tests() {
                   <td className="p-3 capitalize">{test.status}</td>
                   <td className="p-3">
                     {test.timing?.totalDurationMinutes || 0} min
+                  </td>
+                  <td className="p-3 text-sm">
+                    {test.visibilityStart
+                      ? test.visibilityStart
+                        ?.toDate?.()
+                        ?.toLocaleString?.()
+                      : "-"}
+                  </td>
+                  <td className="p-3 text-sm">
+                    {test.visibilityEnd
+                      ? test.visibilityEnd
+                        ?.toDate?.()
+                        ?.toLocaleString?.()
+                      : "-"}
                   </td>
                   <td className="p-3 space-x-4">
                     <button
