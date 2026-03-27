@@ -20,8 +20,8 @@ const ITEMS_PER_PAGE = 20;
 export default function SubscriptionPlans() {
   const [plans, setPlans] = useState([]);
   const [exams, setExams] = useState([]);
-  const [testsMap, setTestsMap] = useState({}); // { examId: [tests] }
-  const [pyqsMap, setPyqsMap] = useState({}); // { examId: [pyqs] }
+  const [testsMap, setTestsMap] = useState({});
+  const [pyqsMap, setPyqsMap] = useState({});
 
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,12 +33,11 @@ export default function SubscriptionPlans() {
     name: "",
     durationDays: 30,
     price: 0,
-    examsIncluded: {}, // { examId: { tests: [testIds], pyqs: [pyqIds] } }
-    features: [],
+    examsIncluded: {},
+    storeProductId: "",
     isActive: true,
   });
 
-  const [featureInput, setFeatureInput] = useState("");
   const [selectedExamForEdit, setSelectedExamForEdit] = useState("");
 
   /* ---------------- FETCH PLANS ---------------- */
@@ -174,11 +173,10 @@ export default function SubscriptionPlans() {
       durationDays: 30,
       price: 0,
       examsIncluded: {},
-      features: [],
+      storeProductId: "",
       isActive: true,
     });
     setEditingPlan(null);
-    setFeatureInput("");
     setSelectedExamForEdit("");
     setShowModal(false);
   };
@@ -196,7 +194,7 @@ export default function SubscriptionPlans() {
         name: formData.name,
         durationDays: formData.durationDays,
         price: formData.price,
-        features: formData.features,
+        storeProductId: formData.storeProductId,
         isActive: formData.isActive,
         examsIncluded: formData.examsIncluded,
       };
@@ -362,31 +360,6 @@ export default function SubscriptionPlans() {
     }
   };
 
-  /* ---------------- FEATURE HANDLING ---------------- */
-  const addFeature = () => {
-    if (!featureInput.trim()) {
-      Swal.fire("Error", "Feature cannot be empty", "error");
-      return;
-    }
-
-    setFormData({
-      ...formData,
-      features: [...formData.features, featureInput],
-    });
-
-    setFeatureInput("");
-  };
-
-  const removeFeature = (index) => {
-    const updated = [...formData.features];
-    updated.splice(index, 1);
-
-    setFormData({
-      ...formData,
-      features: updated,
-    });
-  };
-
   /* ---------------- EXAM SELECTION IN MODAL ---------------- */
   const toggleExamSelection = (examId) => {
     const isSelected = examId in formData.examsIncluded;
@@ -540,10 +513,9 @@ export default function SubscriptionPlans() {
               durationDays: 30,
               price: 0,
               examsIncluded: {},
-              features: [],
+              storeProductId: "",
               isActive: true,
             });
-            setFeatureInput("");
             setSelectedExamForEdit("");
             setShowModal(true);
           }}
@@ -607,7 +579,7 @@ export default function SubscriptionPlans() {
                         durationDays: plan.durationDays || 30,
                         price: plan.price || 0,
                         examsIncluded: plan.examsIncluded || {},
-                        features: plan.features || [],
+                        storeProductId: plan.storeProductId || "",
                         isActive: plan.isActive ?? true,
                       });
                       setSelectedExamForEdit("");
@@ -890,59 +862,23 @@ export default function SubscriptionPlans() {
                 )}
               </div>
 
-              {/* PLAN FEATURES */}
+              {/* PRODUCT ID */}
               <div>
-                <label className="block font-semibold mb-3 text-slate-700">
-                  Plan Features
+                <label className="block font-semibold mb-2 text-slate-700">
+                  Product Id
                 </label>
-
-                <div className="flex gap-2 mb-3">
-                  <input
-                    type="text"
-                    placeholder="Add feature"
-                    value={featureInput}
-                    onChange={(e) =>
-                      setFeatureInput(e.target.value)
-                    }
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addFeature();
-                      }
-                    }}
-                    className="flex-1 border p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={addFeature}
-                    className="bg-indigo-600 text-white px-4 rounded hover:bg-indigo-700 transition font-medium"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                {/* FEATURES LIST */}
-                {formData.features.length > 0 && (
-                  <ul className="space-y-2">
-                    {formData.features.map((feature, index) => (
-                      <li
-                        key={index}
-                        className="flex justify-between items-center bg-slate-100 px-3 py-2 rounded hover:bg-slate-150 transition"
-                      >
-                        <span className="text-sm text-slate-700">
-                          • {feature}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeFeature(index)}
-                          className="text-red-500 hover:text-red-700 text-sm font-medium"
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <input
+                  type="text"
+                  placeholder="Enter Store Product ID"
+                  value={formData.storeProductId}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      storeProductId: e.target.value,
+                    })
+                  }
+                  className="w-full border p-3 rounded focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                />
               </div>
 
               {/* ACTIVE STATUS */}
