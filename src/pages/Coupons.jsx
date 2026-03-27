@@ -10,6 +10,7 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { logActivity } from "../utils/logActivity";
+import Swal from "sweetalert2";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -21,15 +22,21 @@ export default function Coupons() {
   const [showModal, setShowModal] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState(null);
 
+  const [users, setUsers] = useState([]);
+  const [userGroups, setUserGroups] = useState([]);
+
   const [formData, setFormData] = useState({
     code: "",
-    discountType: "percentage", // percentage | flat
+    discountType: "percentage",
     discountValue: 0,
     validFrom: "",
     validUntil: "",
     usageLimit: 1,
     usedCount: 0,
     isActive: true,
+    userType: "all",
+    userIds: [],
+    userGroupIds: []
   });
 
   /* ---------------- FETCH COUPONS ---------------- */
@@ -47,6 +54,35 @@ export default function Coupons() {
     );
 
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "users"),
+      snap => {
+        setUsers(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
+      }
+    );
+  }, []);
+
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "userGroups"),
+      snap => {
+
+        setUserGroups(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
+      }
+    );
   }, []);
 
   /* ---------------- SEARCH ---------------- */
@@ -85,23 +121,86 @@ export default function Coupons() {
     setShowModal(false);
   };
 
+  const toggleUser = (userId) => {
+    const exists =
+      formData.userIds.includes(userId);
+    setFormData({
+      ...formData,
+      userIds: exists
+        ? formData.userIds.filter(
+          id => id !== userId
+        )
+        : [...formData.userIds, userId]
+    });
+  };
+
+  const toggleUserGroup = (groupId) => {
+    const exists =
+      formData.userGroupIds.includes(groupId);
+    setFormData({
+      ...formData,
+      userGroupIds: exists
+        ? formData.userGroupIds.filter(
+          id => id !== groupId
+        )
+        : [...formData.userGroupIds, groupId]
+    });
+  };
+
   /* ---------------- SUBMIT ---------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.code) {
-      alert("Coupon Code is required");
+      Swal.fire("Missing Field", "Coupon Code is required", "warning");
       return;
     }
 
+    /* -------- DETERMINE TARGET USERS -------- */
+
+    let finalUsers = [];
+    // All users
+    if (formData.userType === "all") {
+      finalUsers =
+        users.map(u => u.id);
+    }
+    // Specific users
+    if (formData.userType === "specific") {
+      finalUsers =
+        formData.userIds;
+    }
+    // Group users
+    if (formData.userType === "groups") {
+      formData.userGroupIds
+        .forEach(groupId => {
+          const group =
+            userGroups.find(
+              g => g.id === groupId
+            );
+          if (group?.userIds) {
+            finalUsers.push(
+              ...group.userIds
+            );
+          }
+        });
+    }
+
+    // Remove duplicates
+    finalUsers =
+      [...new Set(finalUsers)];
+
+    /* -------- FINAL PAYLOAD -------- */
     const payload = {
       ...formData,
-      validFrom: formData.validFrom
-        ? new Date(formData.validFrom)
-        : null,
-      validUntil: formData.validUntil
-        ? new Date(formData.validUntil)
-        : null,
+      userIds: finalUsers,
+      validFrom:
+        formData.validFrom
+          ? new Date(formData.validFrom)
+          : null,
+      validUntil:
+        formData.validUntil
+          ? new Date(formData.validUntil)
+          : null
     };
 
     if (editingCoupon) {
@@ -133,12 +232,30 @@ export default function Coupons() {
       });
     }
 
+    Swal.fire({
+      icon: "success",
+      title: editingCoupon ? "Coupon Updated" : "Coupon Created",
+      timer: 1500,
+      showConfirmButton: false
+    });
+
     resetForm();
   };
 
   /* ---------------- DELETE ---------------- */
   const handleDelete = async (id) => {
-    if (!confirm("Delete this coupon?")) return;
+
+    const confirm = await Swal.fire({
+      title: "Delete Coupon?",
+      text: "This action cannot be undone",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it"
+    });
+
+    if (!confirm.isConfirmed) return;
 
     const coupon = coupons.find(c => c.id === id);
 
@@ -149,6 +266,15 @@ export default function Coupons() {
       description: `Deleted coupon: ${coupon?.code}`,
       entityId: id,
       entityType: "coupon",
+    });
+
+    // ✅ SUCCESS ALERT
+    Swal.fire({
+      icon: "success",
+      title: "Deleted!",
+      text: "Coupon deleted successfully",
+      timer: 1500,
+      showConfirmButton: false
     });
   };
 
@@ -426,6 +552,172 @@ export default function Coupons() {
                   className="w-full border p-3 rounded"
                 />
               </div>
+
+              {/* TARGET USERS */}
+
+              <div>
+
+                <label className="block font-semibold mb-2">
+                  Target Users
+                </label>
+
+                <div className="flex gap-4 mb-3">
+
+                  <label className="flex items-center">
+
+                    <input
+                      type="radio"
+                      checked={formData.userType === "all"}
+                      onChange={() =>
+                        setFormData({
+                          ...formData,
+                          userType: "all",
+                          userIds: [],
+                          userGroupIds: []
+                        })
+                      }
+                    />
+
+                    <span className="ml-2">
+                      All Users
+                    </span>
+
+                  </label>
+
+                  <label className="flex items-center">
+
+                    <input
+                      type="radio"
+                      checked={formData.userType === "specific"}
+                      onChange={() =>
+                        setFormData({
+                          ...formData,
+                          userType: "specific",
+                          userGroupIds: []
+                        })
+                      }
+                    />
+
+                    <span className="ml-2">
+                      Specific Users
+                    </span>
+
+                  </label>
+
+                  <label className="flex items-center">
+
+                    <input
+                      type="radio"
+                      checked={formData.userType === "groups"}
+                      onChange={() =>
+                        setFormData({
+                          ...formData,
+                          userType: "groups",
+                          userIds: []
+                        })
+                      }
+                    />
+
+                    <span className="ml-2">
+                      User Groups
+                    </span>
+
+                  </label>
+
+                </div>
+
+              </div>
+
+              {formData.userType === "specific" && (
+
+                <div>
+
+                  <label className="block font-medium mb-2">
+                    Select Users
+                  </label>
+
+                  <div className="max-h-40 overflow-y-auto border p-3 rounded bg-slate-50">
+
+                    {users.map(u => (
+
+                      <label
+                        key={u.id}
+                        className="flex gap-2 mb-2 items-center"
+                      >
+
+                        <input
+                          type="checkbox"
+                          checked={
+                            formData.userIds.includes(u.id)
+                          }
+                          onChange={() =>
+                            toggleUser(u.id)
+                          }
+                        />
+
+                        <span>
+
+                          <span className="font-medium">
+                            {u.name || "No Name"}
+                          </span>
+
+                          <span className="text-gray-500 text-sm ml-2">
+
+                            ({u.phone || u.email})
+
+                          </span>
+
+                        </span>
+
+                      </label>
+
+                    ))}
+
+                  </div>
+
+                </div>
+
+              )}
+
+              {formData.userType === "groups" && (
+
+                <div>
+
+                  <label className="block font-medium mb-2">
+                    Select Groups
+                  </label>
+
+                  <div className="max-h-40 overflow-y-auto border p-3 rounded bg-slate-50">
+
+                    {userGroups.map(group => (
+
+                      <label
+                        key={group.id}
+                        className="flex gap-2 mb-2"
+                      >
+
+                        <input
+                          type="checkbox"
+                          checked={
+                            formData.userGroupIds.includes(group.id)
+                          }
+                          onChange={() =>
+                            toggleUserGroup(group.id)
+                          }
+                        />
+
+                        {group.name}
+                        ({group.userIds?.length || 0})
+
+                      </label>
+
+                    ))}
+
+                  </div>
+
+                </div>
+
+              )}
 
               <div>
                 <label className="flex items-center gap-2 font-semibold">

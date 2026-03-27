@@ -18,6 +18,7 @@ export default function NotificationManager() {
     const [notifications, setNotifications] = useState([]);
     const [users, setUsers] = useState([]);
     const [userGroups, setUserGroups] = useState([]);
+    const [exams, setExams] = useState([]);
 
     const [isOpen, setIsOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -27,7 +28,8 @@ export default function NotificationManager() {
         title: "",
         msg: "",
         imageUrl: "",
-        type: "general",
+        type: "test",
+        examId: "",
         userType: "all",
         userIds: [],
         userGroupIds: [],
@@ -79,6 +81,22 @@ export default function NotificationManager() {
                     ...d.data()
                 }))
             )
+        );
+    }, []);
+
+    /* ---------------- FETCH EXAMS ---------------- */
+
+    useEffect(() => {
+        return onSnapshot(
+            collection(db, "exams"),
+            snap => {
+                setExams(
+                    snap.docs.map(d => ({
+                        id: d.id,
+                        ...d.data()
+                    }))
+                );
+            }
         );
     }, []);
 
@@ -177,6 +195,7 @@ export default function NotificationManager() {
             msg: form.msg,
             imageUrl: form.imageUrl || "",
             type: form.type,
+            examId: form.examId || "",
             userId: finalUsers,
             showNotification: form.showNotification,
             updatedAt: serverTimestamp()
@@ -236,8 +255,12 @@ export default function NotificationManager() {
             title: n.title || "",
             msg: n.msg || "",
             imageUrl: n.imageUrl || "",
-            type: n.type || "general",
-            userType: ids.length === users.length ? "all" : "specific",
+            type: n.type || "test",
+            examId: n.examId || "",
+            userType:
+                ids.length === users.length
+                    ? "all"
+                    : "specific",
             userIds: ids || [],
             userGroupIds: [],
             showNotification: n.showNotification ?? true
@@ -306,6 +329,7 @@ export default function NotificationManager() {
                             <th className="p-4">Title</th>
                             <th className="p-4">Image</th>
                             <th className="p-4">Type</th>
+                            <th className="p-4">Exam</th>
                             <th className="p-4">Target</th>
                             <th className="p-4">Status</th>
                             <th className="p-4">Date</th>
@@ -334,6 +358,12 @@ export default function NotificationManager() {
 
                                 <td className="p-4 capitalize">
                                     {n.type}
+                                </td>
+
+                                <td className="p-4">
+                                    {n.examId
+                                        ? exams.find(e => e.id === n.examId)?.name
+                                        : "All Exams"}
                                 </td>
 
                                 <td className="p-4">
@@ -472,9 +502,41 @@ export default function NotificationManager() {
                                         setForm({ ...form, type: e.target.value })
                                     }
                                 >
-                                    <option value="general">Test Alerts</option>
-                                    <option value="exam">Results</option>
-                                    <option value="offer">Offers</option>
+                                    <option value="tests">Test Alerts</option>
+                                    <option value="results">Results</option>
+                                    <option value="offers">Offers</option>
+                                </select>
+                            </div>
+
+                            {/* EXAM DROPDOWN */}
+
+                            <div>
+                                <label className="block font-medium mb-2">
+                                    Select Exam
+                                </label>
+
+                                <select
+                                    className="border p-3 w-full rounded"
+                                    value={form.examId}
+                                    onChange={e =>
+                                        setForm({
+                                            ...form,
+                                            examId: e.target.value
+                                        })
+                                    }
+                                >
+                                    <option value="">
+                                        All Exams
+                                    </option>
+
+                                    {exams.map(exam => (
+                                        <option
+                                            key={exam.id}
+                                            value={exam.id}
+                                        >
+                                            {exam.name}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
