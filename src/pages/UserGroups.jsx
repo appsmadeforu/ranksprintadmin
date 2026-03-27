@@ -11,14 +11,11 @@ import {
   getDocs
 } from "firebase/firestore";
 import Swal from "sweetalert2";
-import * as XLSX from "xlsx/xlsx.mjs";
 
 export default function UserGroups() {
 
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
-  const [tests, setTests] = useState([]);
-  const [pyqs, setPyqs] = useState([]);
 
   const [showModal, setShowModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
@@ -27,12 +24,7 @@ export default function UserGroups() {
 
   const [formData, setFormData] = useState({
     name: "",
-    promoCode: "",
-    discountPercentage: 0,
-    description: "",
     isActive: true,
-    specialTests: [],
-    specialPyqs: [],
     userIds: []
   });
 
@@ -62,18 +54,6 @@ export default function UserGroups() {
       }
     );
     return () => unsubscribe();
-  }, []);
-
-  /* ---------------- FETCH TESTS ---------------- */
-  useEffect(() => {
-    const fetchData = async () => {
-      const testSnap = await getDocs(collection(db, "tests"));
-      setTests(testSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-      const pyqSnap = await getDocs(collection(db, "pyqs"));
-      setPyqs(pyqSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-    };
-    fetchData();
   }, []);
 
   /* ---------------- FILTERED USERS ---------------- */
@@ -120,42 +100,10 @@ export default function UserGroups() {
   const resetForm = () => {
     setFormData({
       name: "",
-      promoCode: "",
-      discountPercentage: 0,
-      description: "",
       isActive: true,
-      specialTests: [],
-      specialPyqs: [],
       userIds: []
     });
     setEditingGroup(null);
-  };
-
-  /* ---------------- EXCEL BULK IMPORT ---------------- */
-  const handleExcelUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const data = await file.arrayBuffer();
-    const workbook = XLSX.read(data);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json(sheet);
-
-    const matchedUsers = [];
-
-    json.forEach(row => {
-      const user = users.find(u =>
-        u.email?.toLowerCase() === row.Email?.toLowerCase()
-      );
-      if (user) matchedUsers.push(user.id);
-    });
-
-    setFormData(prev => ({
-      ...prev,
-      userIds: [...new Set([...prev.userIds, ...matchedUsers])]
-    }));
-
-    Swal.fire("Success", "Users imported from Excel", "success");
   };
 
   const toggleUser = (userId) => {
@@ -184,12 +132,7 @@ export default function UserGroups() {
 
     setFormData({
       name: group.name || "",
-      promoCode: group.promoCode || "",
-      discountPercentage: group.discountPercentage || 0,
-      description: group.description || "",
       isActive: group.isActive ?? true,
-      specialTests: group.specialTests || [],
-      specialPyqs: group.specialPyqs || [],
       userIds: group.userIds || []
     });
 
@@ -242,8 +185,6 @@ export default function UserGroups() {
             <tr>
               <th className="p-3">Name</th>
               <th className="p-3">Users</th>
-              <th className="p-3">Promo</th>
-              <th className="p-3">Discount</th>
               <th className="p-3">Status</th>
               <th className="p-3">Actions</th>
             </tr>
@@ -253,8 +194,6 @@ export default function UserGroups() {
               <tr key={group.id} className="border-t">
                 <td className="p-3 font-medium">{group.name}</td>
                 <td className="p-3">{group.userIds?.length || 0}</td>
-                <td className="p-3">{group.promoCode || "-"}</td>
-                <td className="p-3">{group.discountPercentage}%</td>
                 <td className="p-3">
                   {group.isActive ? "Active" : "Inactive"}
                 </td>
@@ -302,29 +241,6 @@ export default function UserGroups() {
                 />
               </div>
 
-              {/* PROMO */}
-              <div>
-                <label className="block font-semibold mb-2">Promo Code</label>
-                <input
-                  className="w-full border p-3 rounded"
-                  value={formData.promoCode}
-                  onChange={e => setFormData({ ...formData, promoCode: e.target.value })}
-                />
-              </div>
-
-              {/* DISCOUNT */}
-              <div>
-                <label className="block font-semibold mb-2">Discount %</label>
-                <input
-                  type="number"
-                  className="w-full border p-3 rounded"
-                  value={formData.discountPercentage}
-                  onChange={e =>
-                    setFormData({ ...formData, discountPercentage: Number(e.target.value) })
-                  }
-                />
-              </div>
-
               {/* USERS */}
               <div>
                 <label className="block font-semibold mb-2">Add Users</label>
@@ -347,41 +263,6 @@ export default function UserGroups() {
                     </label>
                   ))}
                 </div>
-
-                <label className="mt-2 block bg-indigo-600 text-white px-3 py-2 rounded cursor-pointer w-fit">
-                  Bulk Import Excel
-                  <input type="file" hidden accept=".xlsx" onChange={handleExcelUpload} />
-                </label>
-              </div>
-
-              {/* SPECIAL TESTS */}
-              <div>
-                <label className="block font-semibold mb-2">Special Tests</label>
-                {tests.map(test => (
-                  <label key={test.id} className="block">
-                    <input
-                      type="checkbox"
-                      checked={formData.specialTests.includes(test.id)}
-                      onChange={() => toggleArrayField("specialTests", test.id)}
-                    />
-                    {test.name}
-                  </label>
-                ))}
-              </div>
-
-              {/* SPECIAL PYQS */}
-              <div>
-                <label className="block font-semibold mb-2">Special PYQs</label>
-                {pyqs.map(p => (
-                  <label key={p.id} className="block">
-                    <input
-                      type="checkbox"
-                      checked={formData.specialPyqs.includes(p.id)}
-                      onChange={() => toggleArrayField("specialPyqs", p.id)}
-                    />
-                    {p.name}
-                  </label>
-                ))}
               </div>
 
               <div className="flex justify-end gap-3">
