@@ -23,6 +23,8 @@ export default function TestEditor() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("settings");
   const [sections, setSections] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [userGroups, setUserGroups] = useState([]);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -61,6 +63,10 @@ export default function TestEditor() {
       rankingBasis: "testScore",
       firstAttemptOnlyRanking: true,
     },
+
+    userType: "all",
+    userIds: [],
+    userGroupIds: [],
   });
 
   /* ---------------- FETCH ---------------- */
@@ -84,6 +90,9 @@ export default function TestEditor() {
           visibilityEnd: data.visibilityEnd
             ? data.visibilityEnd.toDate().toISOString().slice(0, 16)
             : "",
+          userType: data.userType || "all",
+          userIds: data.userIds || [],
+          userGroupIds: data.userGroupIds || []
         });
       }
     };
@@ -109,6 +118,64 @@ export default function TestEditor() {
     return () => unsubscribe();
   }, [examId, testId, isNew]);
 
+  /* ---------------- FETCH USERS ---------------- */
+
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "users"),
+      snap => {
+        setUsers(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
+      }
+    );
+  }, []);
+
+  /* ---------------- FETCH GROUPS ---------------- */
+
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "userGroups"),
+      snap => {
+        setUserGroups(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
+      }
+    );
+  }, []);
+
+  const toggleUser = (userId) => {
+    const list =
+      formData.userIds || [];
+    const exists =
+      list.includes(userId);
+    setFormData({
+      ...formData,
+      userIds: exists
+        ? list.filter(id => id !== userId)
+        : [...list, userId]
+    });
+  };
+
+  const toggleUserGroup = (groupId) => {
+    const list =
+      formData.userGroupIds || [];
+    const exists =
+      list.includes(groupId);
+    setFormData({
+      ...formData,
+      userGroupIds: exists
+        ? list.filter(id => id !== groupId)
+        : [...list, groupId]
+    });
+  };
+
   /* ---------------- SAVE ---------------- */
 
   const handleSave = async () => {
@@ -119,16 +186,72 @@ export default function TestEditor() {
         ? doc(collection(db, "exams", examId, "tests"))
         : doc(db, "exams", examId, "tests", testId);
 
+      /* -------- DETERMINE TARGET USERS -------- */
+
+      let finalUsers = [];
+
+      if (formData.userType === "all") {
+
+        finalUsers =
+          users.map(u => u.id);
+
+      }
+
+      if (formData.userType === "specific") {
+
+        finalUsers =
+          formData.userIds;
+
+      }
+
+      if (formData.userType === "groups") {
+
+        formData.userGroupIds.forEach(groupId => {
+
+          const group =
+            userGroups.find(
+              g => g.id === groupId
+            );
+
+          if (group?.userIds) {
+
+            finalUsers.push(
+              ...group.userIds
+            );
+
+          }
+
+        });
+
+      }
+
+      finalUsers =
+        [...new Set(finalUsers)];
+
+      /* -------- PAYLOAD -------- */
+
       const payload = {
+
         ...formData,
-        visibilityStart: formData.visibilityStart
-          ? new Date(formData.visibilityStart)
-          : null,
-        visibilityEnd: formData.visibilityEnd
-          ? new Date(formData.visibilityEnd)
-          : null,
-        createdBy: auth.currentUser?.uid || "admin",
-        updatedAt: serverTimestamp(),
+
+        userIds: finalUsers,
+
+        visibilityStart:
+          formData.visibilityStart
+            ? new Date(formData.visibilityStart)
+            : null,
+
+        visibilityEnd:
+          formData.visibilityEnd
+            ? new Date(formData.visibilityEnd)
+            : null,
+
+        createdBy:
+          auth.currentUser?.uid || "admin",
+
+        updatedAt:
+          serverTimestamp()
+
       };
 
       if (isNew) {
@@ -469,13 +592,135 @@ export default function TestEditor() {
             </label>
           </div>
 
+          {/* TARGET USERS */}
+
+          <div>
+            <h3 className="font-bold mb-4">
+              Target Users
+            </h3>
+            <div className="flex gap-4 mb-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  checked={formData.userType === "all"}
+                  onChange={() =>
+                    setFormData({
+                      ...formData,
+                      userType: "all",
+                      userIds: [],
+                      userGroupIds: []
+                    })
+                  }
+                />
+                <span className="ml-2">
+                  All Users
+                </span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  checked={formData.userType === "specific"}
+                  onChange={() =>
+                    setFormData({
+                      ...formData,
+                      userType: "specific",
+                      userGroupIds: []
+                    })
+                  }
+                />
+                <span className="ml-2">
+                  Specific Users
+                </span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  checked={formData.userType === "groups"}
+                  onChange={() =>
+                    setFormData({
+                      ...formData,
+                      userType: "groups",
+                      userIds: []
+                    })
+                  }
+                />
+                <span className="ml-2">
+                  User Groups
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {formData.userType === "specific" && (
+            <div>
+              <label className="block font-medium mb-2">
+                Select Users
+              </label>
+              <div className="max-h-40 overflow-y-auto border p-3 rounded bg-slate-50">
+                {users.map(u => (
+                  <label
+                    key={u.id}
+                    className="flex gap-2 mb-2 items-center"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        formData.userIds?.includes(u.id)
+                      }
+                      onChange={() =>
+                        toggleUser(u.id)
+                      }
+                    />
+                    <span>
+                      <span className="font-medium">
+                        {u.name || "No Name"}
+                      </span>
+                      <span className="text-gray-500 text-sm ml-2">
+                        ({u.phone || u.email})
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {formData.userType === "groups" && (
+            <div>
+              <label className="block font-medium mb-2">
+                Select Groups
+              </label>
+              <div className="max-h-40 overflow-y-auto border p-3 rounded bg-slate-50">
+                {userGroups.map(group => (
+                  <label
+                    key={group.id}
+                    className="flex gap-2 mb-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={
+                        formData.userGroupIds?.includes(group.id)
+                      }
+                      onChange={() =>
+                        toggleUserGroup(group.id)
+                      }
+                    />
+                    {group.name}
+                    ({group.userIds?.length || 0})
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
             onClick={handleSave}
             className="bg-indigo-600 text-white px-6 py-2 rounded"
           >
             Save Test
           </button>
-
         </div>
       )}
 
