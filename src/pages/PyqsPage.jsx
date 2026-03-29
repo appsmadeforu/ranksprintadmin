@@ -294,6 +294,7 @@ export default function PyqsManager({ examId }) {
             finalUsers =
                 [...new Set(finalUsers)];
             /* -------- BASE PAYLOAD -------- */
+
             const basePayload = {
                 name: formData.chapterName,
                 pdfUrl: "",
@@ -302,8 +303,7 @@ export default function PyqsManager({ examId }) {
                 status: formData.status,
                 userType: formData.userType,
                 userIds: finalUsers,
-                userGroupIds: formData.userGroupIds,
-                createdAt: serverTimestamp(),
+                userGroupIds: formData.userGroupIds
             };
 
             let savedDocId;
@@ -322,7 +322,10 @@ export default function PyqsManager({ examId }) {
                     editingData.id
                 );
 
-                await updateDoc(docRef, basePayload);
+                await updateDoc(docRef, {
+                    ...basePayload,
+                    updatedAt: serverTimestamp()
+                });
                 savedDocId = editingData.id;
 
                 setAllChapters(prev =>
@@ -344,7 +347,10 @@ export default function PyqsManager({ examId }) {
                         formData.subjectId,
                         "chapters"
                     ),
-                    basePayload
+                    {
+                        ...basePayload,
+                        createdAt: serverTimestamp()
+                    }
                 );
 
                 savedDocId = newDoc.id;
@@ -443,6 +449,7 @@ export default function PyqsManager({ examId }) {
     /* ---------------- EDIT ---------------- */
 
     const handleEdit = (item) => {
+        setEditingData(item);
         setFormData({
             examId: item.examId,
             subjectId: item.subjectId,
@@ -454,7 +461,9 @@ export default function PyqsManager({ examId }) {
             userIds: item.userIds || [],
             userGroupIds: item.userGroupIds || []
         });
+
         setShowModal(true);
+
     };
     /* ---------------- UI (UNCHANGED) ---------------- */
 
