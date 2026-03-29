@@ -20,6 +20,8 @@ export default function PyqsManager({ examId }) {
     const [showModal, setShowModal] = useState(false);
     const [editingData, setEditingData] = useState(null);
     const [exams, setExams] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [userGroups, setUserGroups] = useState([]);
     const [filterLock, setFilterLock] = useState("");
     const [filterStatus, setFilterStatus] = useState("");
 
@@ -30,6 +32,9 @@ export default function PyqsManager({ examId }) {
         questionCount: 0,
         isLocked: false,
         status: "draft",
+        userType: "all",
+        userIds: [],
+        userGroupIds: []
     };
 
     const [formData, setFormData] = useState(emptyForm);
@@ -73,6 +78,40 @@ export default function PyqsManager({ examId }) {
         };
 
         fetchExams();
+    }, []);
+
+    /* ---------------- FETCH USERS ---------------- */
+
+    useEffect(() => {
+        const fetchUsers = async () => {
+            const snap = await getDocs(
+                collection(db, "users")
+            );
+            setUsers(
+                snap.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+            );
+        };
+        fetchUsers();
+    }, []);
+
+    /* ---------------- FETCH USER GROUPS ---------------- */
+
+    useEffect(() => {
+        const fetchGroups = async () => {
+            const snap = await getDocs(
+                collection(db, "userGroups")
+            );
+            setUserGroups(
+                snap.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+            );
+        };
+        fetchGroups();
     }, []);
 
     /* ---------------- FETCH PYQS ---------------- */
@@ -177,6 +216,34 @@ export default function PyqsManager({ examId }) {
         currentPage * ITEMS_PER_PAGE
     );
 
+    /* ---------------- TOGGLE USERS ---------------- */
+
+    const toggleUser = (userId) => {
+        const list =
+            formData.userIds || [];
+        const exists =
+            list.includes(userId);
+        setFormData({
+            ...formData,
+            userIds: exists
+                ? list.filter(id => id !== userId)
+                : [...list, userId]
+        });
+    };
+
+    const toggleUserGroup = (groupId) => {
+        const list =
+            formData.userGroupIds || [];
+        const exists =
+            list.includes(groupId);
+        setFormData({
+            ...formData,
+            userGroupIds: exists
+                ? list.filter(id => id !== groupId)
+                : [...list, groupId]
+        });
+    };
+
     /* ---------------- SAVE (FAST VERSION) ---------------- */
 
     const handleSave = async () => {
@@ -200,13 +267,43 @@ export default function PyqsManager({ examId }) {
                 { merge: true }
             );
 
+            /* -------- DETERMINE TARGET USERS -------- */
+
+            let finalUsers = [];
+            if (formData.userType === "all") {
+                finalUsers =
+                    users.map(u => u.id);
+            }
+            if (formData.userType === "specific") {
+                finalUsers =
+                    formData.userIds;
+            }
+            if (formData.userType === "groups") {
+                formData.userGroupIds.forEach(groupId => {
+                    const group =
+                        userGroups.find(
+                            g => g.id === groupId
+                        );
+                    if (group?.userIds) {
+                        finalUsers.push(
+                            ...group.userIds
+                        );
+                    }
+                });
+            }
+            finalUsers =
+                [...new Set(finalUsers)];
+            /* -------- BASE PAYLOAD -------- */
+
             const basePayload = {
                 name: formData.chapterName,
                 pdfUrl: "",
                 questionCount: Number(formData.questionCount),
                 isLocked: formData.isLocked,
                 status: formData.status,
-                createdAt: serverTimestamp(),
+                userType: formData.userType,
+                userIds: finalUsers,
+                userGroupIds: formData.userGroupIds
             };
 
             let savedDocId;
@@ -225,7 +322,10 @@ export default function PyqsManager({ examId }) {
                     editingData.id
                 );
 
-                await updateDoc(docRef, basePayload);
+                await updateDoc(docRef, {
+                    ...basePayload,
+                    updatedAt: serverTimestamp()
+                });
                 savedDocId = editingData.id;
 
                 setAllChapters(prev =>
@@ -247,7 +347,10 @@ export default function PyqsManager({ examId }) {
                         formData.subjectId,
                         "chapters"
                     ),
-                    basePayload
+                    {
+                        ...basePayload,
+                        createdAt: serverTimestamp()
+                    }
                 );
 
                 savedDocId = newDoc.id;
@@ -354,8 +457,13 @@ export default function PyqsManager({ examId }) {
             questionCount: item.questionCount,
             isLocked: item.isLocked,
             status: item.status,
+            userType: item.userType || "all",
+            userIds: item.userIds || [],
+            userGroupIds: item.userGroupIds || []
         });
+
         setShowModal(true);
+
     };
     /* ---------------- UI (UNCHANGED) ---------------- */
 
@@ -534,8 +642,8 @@ export default function PyqsManager({ examId }) {
 
             {/* MODAL */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/40 flex justify-center items-center">
-                    <div className="bg-white w-full max-w-xl p-6 rounded-xl space-y-4">
+                <div className="fixed inset-0 bg-black/40 flex justify-center items-start overflow-y-auto p-6">
+                    <div className="bg-white w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 rounded-xl space-y-4">
 
                         <h3 className="text-lg font-bold">
                             {editingData ? "Edit PYQ" : "Add PYQ"}
@@ -648,6 +756,157 @@ export default function PyqsManager({ examId }) {
                                 <option value="published">Published</option>
                             </select>
                         </div>
+
+                        {/* TARGET USERS */}
+
+                        <div>
+                            <label className="block text-sm font-medium">
+                                Target Users
+                            </label>
+
+                            <div className="flex gap-4 mt-2">
+                                <label className="flex items-center">
+                                    <input
+                                        type="radio"
+                                        checked={formData.userType === "all"}
+                                        onChange={() =>
+                                            setFormData({
+                                                ...formData,
+                                                userType: "all",
+                                                userIds: [],
+                                                userGroupIds: []
+                                            })
+                                        }
+                                    />
+                                    <span className="ml-2">
+                                        All Users
+                                    </span>
+                                </label>
+
+                                <label className="flex items-center">
+                                    <input
+                                        type="radio"
+                                        checked={formData.userType === "specific"}
+                                        onChange={() =>
+                                            setFormData({
+                                                ...formData,
+                                                userType: "specific",
+                                                userGroupIds: []
+                                            })
+                                        }
+                                    />
+                                    <span className="ml-2">
+                                        Specific Users
+                                    </span>
+                                </label>
+
+                                <label className="flex items-center">
+                                    <input
+                                        type="radio"
+                                        checked={formData.userType === "groups"}
+                                        onChange={() =>
+                                            setFormData({
+                                                ...formData,
+                                                userType: "groups",
+                                                userIds: []
+                                            })
+                                        }
+                                    />
+                                    <span className="ml-2">
+                                        User Groups
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {formData.userType === "specific" && (
+
+                            <div>
+
+                                <label className="block text-sm font-medium">
+                                    Select Users
+                                </label>
+
+                                <div className="max-h-40 overflow-y-auto border p-3 rounded bg-slate-50">
+
+                                    {users.map(u => (
+
+                                        <label
+                                            key={u.id}
+                                            className="flex gap-2 mb-2 items-center"
+                                        >
+
+                                            <input
+                                                type="checkbox"
+                                                checked={
+                                                    formData.userIds?.includes(u.id)
+                                                }
+                                                onChange={() =>
+                                                    toggleUser(u.id)
+                                                }
+                                            />
+
+                                            <span>
+
+                                                <span className="font-medium">
+                                                    {u.name || "No Name"}
+                                                </span>
+
+                                                <span className="text-gray-500 text-sm ml-2">
+                                                    ({u.phone || u.email})
+                                                </span>
+
+                                            </span>
+
+                                        </label>
+
+                                    ))}
+
+                                </div>
+
+                            </div>
+
+                        )}
+
+                        {formData.userType === "groups" && (
+
+                            <div>
+
+                                <label className="block text-sm font-medium">
+                                    Select Groups
+                                </label>
+
+                                <div className="max-h-40 overflow-y-auto border p-3 rounded bg-slate-50">
+
+                                    {userGroups.map(group => (
+
+                                        <label
+                                            key={group.id}
+                                            className="flex gap-2 mb-2"
+                                        >
+
+                                            <input
+                                                type="checkbox"
+                                                checked={
+                                                    formData.userGroupIds?.includes(group.id)
+                                                }
+                                                onChange={() =>
+                                                    toggleUserGroup(group.id)
+                                                }
+                                            />
+
+                                            {group.name}
+                                            ({group.userIds?.length || 0})
+
+                                        </label>
+
+                                    ))}
+
+                                </div>
+
+                            </div>
+
+                        )}
 
                         <div className="flex justify-end gap-3">
                             <button
