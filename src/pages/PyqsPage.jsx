@@ -46,6 +46,7 @@ export default function PyqsManager({ examId }) {
 
     const ITEMS_PER_PAGE = 20;
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedItems, setSelectedItems] = useState([]);
 
     /* ---------------- FETCH SUBJECTS ---------------- */
 
@@ -294,10 +295,10 @@ export default function PyqsManager({ examId }) {
             finalUsers =
                 [...new Set(finalUsers)];
             /* -------- BASE PAYLOAD -------- */
-
             const basePayload = {
                 name: formData.chapterName,
-                pdfUrl: "",
+                pdfUrl:
+                    editingData?.pdfUrl || "",
                 questionCount: Number(formData.questionCount),
                 isLocked: formData.isLocked,
                 status: formData.status,
@@ -373,20 +374,17 @@ export default function PyqsManager({ examId }) {
             setShowModal(false);
             setEditingData(null);
             setFormData(emptyForm);
+            setPdfFile(null);
 
             /* ---- Upload PDF in background ---- */
 
-            if (pdfFile) {
-
+            if (pdfFile instanceof File) {
                 const pdfRef = ref(
                     storage,
                     `pyqs/${formData.examId}/${formData.subjectId}/${Date.now()}-${pdfFile.name}`
                 );
-
                 uploadBytes(pdfRef, pdfFile).then(async () => {
-
                     const pdfUrl = await getDownloadURL(pdfRef);
-
                     const updateRef = doc(
                         db,
                         "exams",
@@ -396,9 +394,7 @@ export default function PyqsManager({ examId }) {
                         "chapters",
                         savedDocId
                     );
-
                     await updateDoc(updateRef, { pdfUrl });
-
                     // Update UI after upload completes
                     setAllChapters(prev =>
                         prev.map(item =>
@@ -412,6 +408,40 @@ export default function PyqsManager({ examId }) {
 
         } catch (err) {
             Swal.fire("Error", err.message, "error");
+        }
+    };
+
+    /* ---------------- SELECT ROW ---------------- */
+
+    const toggleSelect = (item) => {
+        const exists =
+            selectedItems.some(
+                i => i.id === item.id
+            );
+        if (exists) {
+            setSelectedItems(prev =>
+                prev.filter(i => i.id !== item.id)
+            );
+        } else {
+            setSelectedItems(prev => [
+                ...prev,
+                item
+            ]);
+        }
+    };
+
+    /* ---------------- SELECT ALL ---------------- */
+
+    const toggleSelectAll = () => {
+        if (
+            selectedItems.length ===
+            paginatedData.length
+        ) {
+            setSelectedItems([]);
+        } else {
+            setSelectedItems(
+                paginatedData
+            );
         }
     };
 
@@ -446,10 +476,123 @@ export default function PyqsManager({ examId }) {
         Swal.fire("Deleted", "Chapter removed", "success");
     };
 
+    /* ---------------- BULK DELETE ---------------- */
+
+    const handleBulkDelete = async () => {
+        try {
+            if (!filterExam && !filterSubject) {
+                return Swal.fire(
+                    "Warning",
+                    "Please select Exam or Subject filter first",
+                    "warning"
+                );
+            }
+            const confirm = await Swal.fire({
+                title: "Bulk Delete?",
+                text: "This will delete filtered chapters permanently!",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonColor: "#d33",
+                confirmButtonText: "Delete"
+            });
+            if (!confirm.isConfirmed) return;
+            let deleteCount = 0;
+            const itemsToDelete =
+                filteredData; // uses active filters
+            for (let item of itemsToDelete) {
+                await deleteDoc(
+                    doc(
+                        db,
+                        "exams",
+                        item.examId,
+                        "pyqs",
+                        item.subjectId,
+                        "chapters",
+                        item.id
+                    )
+                );
+                deleteCount++;
+            }
+            /* Update UI */
+            setAllChapters(prev =>
+                prev.filter(ch =>
+                    !itemsToDelete.some(d => d.id === ch.id)
+                )
+            );
+            Swal.fire(
+                "Deleted",
+                `${deleteCount} chapters removed`,
+                "success"
+            );
+        } catch (err) {
+            Swal.fire(
+                "Error",
+                err.message,
+                "error"
+            );
+        }
+    };
+
+    /* ---------------- DELETE SELECTED ---------------- */
+
+    const handleDeleteSelected = async () => {
+        if (selectedItems.length === 0) {
+            return Swal.fire(
+                "Warning",
+                "No items selected",
+                "warning"
+            );
+        }
+        const confirm = await Swal.fire({
+            title: "Delete Selected?",
+            text: `${selectedItems.length} chapters will be deleted`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#d33"
+        });
+        if (!confirm.isConfirmed) return;
+        try {
+            for (let item of selectedItems) {
+                await deleteDoc(
+                    doc(
+                        db,
+                        "exams",
+                        item.examId,
+                        "pyqs",
+                        item.subjectId,
+                        "chapters",
+                        item.id
+                    )
+                );
+            }
+            /* Update UI */
+            setAllChapters(prev =>
+                prev.filter(ch =>
+                    !selectedItems.some(
+                        s => s.id === ch.id
+                    )
+                )
+            );
+            setSelectedItems([]);
+            Swal.fire(
+                "Deleted",
+                "Selected chapters removed",
+                "success"
+            );
+        } catch (err) {
+            Swal.fire(
+                "Error",
+                err.message,
+                "error"
+            );
+        }
+    };
+
     /* ---------------- EDIT ---------------- */
 
     const handleEdit = (item) => {
         setEditingData(item);
+        setPdfFile(null);
         setFormData({
             examId: item.examId,
             subjectId: item.subjectId,
@@ -474,11 +617,27 @@ export default function PyqsManager({ examId }) {
                 <h2 className="text-2xl font-bold">PYQs Management</h2>
 
                 <button
+                    onClick={handleDeleteSelected}
+                    className="bg-red-700 text-white px-4 py-2 rounded"
+                >
+                    Delete Selected
+                    ({selectedItems.length})
+                </button>
+
+                <button
+                    onClick={() => handleBulkDelete()}
+                    className="bg-red-600 text-white px-4 py-2 rounded"
+                >
+                    Bulk Delete
+                </button>
+
+                <button
                     onClick={() => setShowModal(true)}
                     className="bg-indigo-600 text-white px-4 py-2 rounded"
                 >
                     + Add PYQ
                 </button>
+
             </div>
 
             {/* FILTERS */}
@@ -572,6 +731,17 @@ export default function PyqsManager({ examId }) {
                 <table className="w-full text-left">
                     <thead className="bg-slate-200">
                         <tr>
+                            <th className="p-3">
+                                <input
+                                    type="checkbox"
+                                    checked={
+                                        selectedItems.length ===
+                                        paginatedData.length &&
+                                        paginatedData.length > 0
+                                    }
+                                    onChange={toggleSelectAll}
+                                />
+                            </th>
                             <th className="p-3">Exam</th>
                             <th className="p-3">Subject</th>
                             <th className="p-3">Chapter</th>
@@ -585,6 +755,19 @@ export default function PyqsManager({ examId }) {
                     <tbody>
                         {paginatedData.map(item => (
                             <tr key={item.id} className="border-t">
+                                <td className="p-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={
+                                            selectedItems.some(
+                                                i => i.id === item.id
+                                            )
+                                        }
+                                        onChange={() =>
+                                            toggleSelect(item)
+                                        }
+                                    />
+                                </td>
                                 <td className="p-3">{item.examName}</td>
                                 <td className="p-3">{item.subjectName}</td>
                                 <td className="p-3">{item.name}</td>
