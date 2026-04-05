@@ -17,6 +17,9 @@ const ALL_PERMISSIONS = [
   "privacy",
   "subjects",
   "notifications",
+  "user-groups",
+  "activity-logs",
+  "settings"
 ];
 
 export default function AdminManager() {

@@ -76,25 +76,31 @@ export default function QuestionsManager({
     return () => unsubscribe();
   }, [examId, testId]);
 
-  /* ---------------- FETCH SUBJECTS ---------------- */
+  /* ---------------- FETCH SUBJECTS (EXAM BASED) ---------------- */
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "subjects"), (snapshot) => {
-      setSubjects(
-        snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }))
-      );
-    });
-
+    if (!examId) return;
+    const unsubscribe = onSnapshot(
+      collection(db, "exams", examId, "subjects"),
+      (snapshot) => {
+        setSubjects(
+          snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }))
+        );
+      }
+    );
     return () => unsubscribe();
-  }, []);
+  }, [examId]);
 
   /* ---------------- GET UNIQUE CHAPTERS FOR SELECTED SUBJECT ---------------- */
   const chaptersForSubject = useMemo(() => {
     if (!filterSubject) return [];
-    const subject = subjects.find(s => s.name === filterSubject);
-    return subject?.chapters || [];
+    const subjectObj =
+      subjects.find(
+        s => s.name === filterSubject
+      );
+    return subjectObj?.chapters || [];
   }, [filterSubject, subjects]);
 
   /* ---------------- FILTER & SEARCH QUESTIONS ---------------- */
@@ -184,6 +190,19 @@ export default function QuestionsManager({
           };
         })
       );
+
+      /* VALIDATE SUBJECT */
+      const selectedSubject =
+        subjects.find(
+          s => s.name === formData.subject
+        );
+      if (!selectedSubject) {
+        return Swal.fire(
+          "Error",
+          "Invalid subject selected",
+          "error"
+        );
+      }
 
       const payload = {
         ...formData,
@@ -501,7 +520,7 @@ export default function QuestionsManager({
               className="w-full border p-2 rounded bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
             >
               <option value="">All Subjects</option>
-              {subjects.map(sub => (
+              {subjects.map((sub) => (
                 <option key={sub.id} value={sub.name}>
                   {sub.name}
                 </option>
@@ -717,7 +736,7 @@ export default function QuestionsManager({
                 }
               >
                 <option value="">Select Subject</option>
-                {subjects.map(sub => (
+                {subjects.map((sub) => (
                   <option key={sub.id} value={sub.name}>
                     {sub.name}
                   </option>
@@ -740,8 +759,11 @@ export default function QuestionsManager({
               >
                 <option value="">Select Chapter</option>
                 {subjects
-                  .find(s => s.name === formData.subject)
-                  ?.chapters?.map((ch, i) => (
+                  .find(
+                    s => s.name === formData.subject
+                  )
+                  ?.chapters
+                  ?.map((ch, i) => (
                     <option key={i} value={ch}>
                       {ch}
                     </option>

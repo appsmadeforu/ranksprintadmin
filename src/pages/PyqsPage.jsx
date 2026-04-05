@@ -48,21 +48,60 @@ export default function PyqsManager({ examId }) {
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedItems, setSelectedItems] = useState([]);
 
-    /* ---------------- FETCH SUBJECTS ---------------- */
+    /* ---------------- FETCH SUBJECTS (NEW LOCATION) ---------------- */
 
     useEffect(() => {
         const fetchSubjects = async () => {
-            const snap = await getDocs(collection(db, "subjects"));
-            setSubjects(
-                snap.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    chapters: doc.data().chapters || []   // <-- ADD THIS
-                }))
-            );
+            let temp = [];
+            /* CASE 1 — All Exams */
+            if (!formData.examId) {
+                const examsSnap =
+                    await getDocs(collection(db, "exams"));
+                for (let examDoc of examsSnap.docs) {
+                    const examId = examDoc.id;
+                    const subjectSnap =
+                        await getDocs(
+                            collection(
+                                db,
+                                "exams",
+                                examId,
+                                "subjects"
+                            )
+                        );
+                    subjectSnap.forEach(doc => {
+                        temp.push({
+                            id: doc.id,
+                            examId,
+                            ...doc.data(),
+                            chapters: doc.data().chapters || []
+                        });
+                    });
+                }
+            }
+            /* CASE 2 — Selected Exam */
+            else {
+                const subjectSnap =
+                    await getDocs(
+                        collection(
+                            db,
+                            "exams",
+                            formData.examId,
+                            "subjects"
+                        )
+                    );
+                subjectSnap.forEach(doc => {
+                    temp.push({
+                        id: doc.id,
+                        examId: formData.examId,
+                        ...doc.data(),
+                        chapters: doc.data().chapters || []
+                    });
+                });
+            }
+            setSubjects(temp);
         };
         fetchSubjects();
-    }, []);
+    }, [formData.examId]);
 
     /* ---------------- FETCH EXAMS ---------------- */
 
@@ -260,6 +299,14 @@ export default function PyqsManager({ examId }) {
             if (!formData.chapterName)
                 return Swal.fire("Error", "Please select Chapter", "error");
 
+            if (!subjects.find(s => s.id === formData.subjectId)) {
+                return Swal.fire(
+                    "Error",
+                    "Invalid subject selected",
+                    "error"
+                );
+            }
+
             await setDoc(
                 doc(db, "exams", formData.examId, "pyqs", formData.subjectId),
                 {
@@ -312,17 +359,15 @@ export default function PyqsManager({ examId }) {
                 subjects.find(s => s.id === formData.subjectId)?.name || "";
 
             if (editingData) {
-
                 const docRef = doc(
                     db,
                     "exams",
-                    formData.examId,
+                    editingData.examId,
                     "pyqs",
-                    formData.subjectId,
+                    editingData.subjectId,
                     "chapters",
                     editingData.id
                 );
-
                 await updateDoc(docRef, {
                     ...basePayload,
                     updatedAt: serverTimestamp()
@@ -388,9 +433,15 @@ export default function PyqsManager({ examId }) {
                     const updateRef = doc(
                         db,
                         "exams",
-                        formData.examId,
+                        editingData
+                            ? editingData.examId
+                            : formData.examId,
+
                         "pyqs",
-                        formData.subjectId,
+                        editingData
+                            ? editingData.subjectId
+                            : formData.subjectId,
+
                         "chapters",
                         savedDocId
                     );
@@ -654,6 +705,7 @@ export default function PyqsManager({ examId }) {
                         value={filterExam}
                         onChange={(e) => {
                             setFilterExam(e.target.value);
+                            setFilterSubject("");
                             setCurrentPage(1);
                         }}
                     >
@@ -679,9 +731,15 @@ export default function PyqsManager({ examId }) {
                         }}
                     >
                         <option value="">All Subjects</option>
-                        {subjects.map(sub => (
-                            <option key={sub.id} value={sub.id}>{sub.name}</option>
-                        ))}
+                        {subjects
+                            .filter(sub =>
+                                !filterExam || sub.examId === filterExam
+                            )
+                            .map(sub => (
+                                <option key={sub.id} value={sub.id}>
+                                    {sub.name}
+                                </option>
+                            ))}
                     </select>
                 </div>
 
@@ -840,7 +898,12 @@ export default function PyqsManager({ examId }) {
                                 className="border p-2 rounded w-full"
                                 value={formData.examId || ""}
                                 onChange={(e) =>
-                                    setFormData({ ...formData, examId: e.target.value })
+                                    setFormData({
+                                        ...formData,
+                                        examId: e.target.value,
+                                        subjectId: "",
+                                        chapterName: ""
+                                    })
                                 }
                             >
                                 <option value="">Select Exam</option>
@@ -865,9 +928,18 @@ export default function PyqsManager({ examId }) {
                                 }
                             >
                                 <option value="">Select Subject</option>
-                                {subjects.map(sub => (
-                                    <option key={sub.id} value={sub.id}>{sub.name}</option>
-                                ))}
+                                {subjects
+                                    .filter(sub =>
+                                        sub.examId === formData.examId
+                                    )
+                                    .map(sub => (
+                                        <option
+                                            key={sub.id}
+                                            value={sub.id}
+                                        >
+                                            {sub.name}
+                                        </option>
+                                    ))}
                             </select>
                         </div>
 

@@ -25,6 +25,7 @@ import {
   Bell,
   Logs,
   LibraryBig,
+  Settings,
 } from "lucide-react";
 
 export default function DashboardLayout() {
@@ -85,6 +86,7 @@ export default function DashboardLayout() {
     { perm: "user-groups", path: "/admin/user-groups", icon: SquareUser, label: "User Groups" },
     { perm: "notifications", path: "/admin/notifications", icon: Bell, label: "Notifications" },
     { perm: "activity-logs", path: "/admin/activity-logs", icon: Logs, label: "Activity Logs" },
+    { perm: "settings", path: "/admin/settings", icon: Settings, label: "Settings" },
   ];
 
   return (

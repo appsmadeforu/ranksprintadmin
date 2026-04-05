@@ -20,6 +20,7 @@ import UserGroups from "./pages/UserGroups";
 import NotificationManager from "./pages/NotificationManager";
 import ActivityLogs from "./pages/ActivityLogs";
 import PyqsPage from "./pages/PyqsPage";
+import Settings from "./pages/Settings";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="notifications" element={<NotificationManager />} />
         <Route path="activity-logs" element={<ActivityLogs />} />
         <Route path="pyqs" element={<PyqsPage />} />
+        <Route path="settings" element={<Settings />} />
 
         {/* 👑 Super Admin Only */}
         <Route path="admins" element={<AdminManager />} />
