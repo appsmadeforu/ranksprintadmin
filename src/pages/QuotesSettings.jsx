@@ -12,6 +12,7 @@ export default function QuotesSettings() {
     const [docId, setDocId] = useState(null);
     const [editingIndex, setEditingIndex] = useState(null);
     const [editValue, setEditValue] = useState("");
+    const [selectedIndexes, setSelectedIndexes] = useState([]);
 
     /* ---------------- LOAD ---------------- */
 
@@ -89,7 +90,6 @@ export default function QuotesSettings() {
     /* ---------------- DELETE ---------------- */
 
     const removeQuote = async (index) => {
-
         const confirm =
             await Swal.fire({
                 title: "Delete Quote?",
@@ -97,37 +97,24 @@ export default function QuotesSettings() {
                 icon: "warning",
                 showCancelButton: true
             });
-
         if (!confirm.isConfirmed) return;
-
         const quoteText =
             quotes[index];
-
         const updated =
             quotes.filter((_, i) => i !== index);
-
         setQuotes(updated);
-
         /* SAVE */
-
         await setDoc(
             doc(db, "quotes", docId),
             { quote_list: updated }
         );
-
         /* LOG */
-
         await logActivity({
-
             actionType: "DELETE_QUOTE",
-
             description:
                 `Deleted quote: ${quoteText}`,
-
             entityId: docId,
-
             entityType: "quote"
-
         });
 
         Swal.fire(
@@ -135,57 +122,105 @@ export default function QuotesSettings() {
             "Quote removed",
             "success"
         );
+    };
 
+    /* ---------------- BULK DELETE ---------------- */
+
+    const bulkDeleteQuotes = async () => {
+        if (!selectedIndexes.length)
+            return Swal.fire(
+                "No Selection",
+                "Select quotes to delete",
+                "warning"
+            );
+        const confirm =
+            await Swal.fire({
+                title: `Delete ${selectedIndexes.length} quotes?`,
+                text: "This cannot be undone",
+                icon: "warning",
+                showCancelButton: true
+            });
+        if (!confirm.isConfirmed) return;
+        const deletedQuotes =
+            selectedIndexes.map(i => quotes[i]);
+        const updated =
+            quotes.filter(
+                (_, i) =>
+                    !selectedIndexes.includes(i)
+            );
+        setQuotes(updated);
+        setSelectedIndexes([]);
+        /* SAVE */
+        await setDoc(
+            doc(db, "quotes", docId),
+            { quote_list: updated }
+        );
+        /* LOG */
+        await logActivity({
+            actionType: "BULK_DELETE_QUOTES",
+            description:
+                `Deleted ${deletedQuotes.length} quotes`,
+            entityId: docId,
+            entityType: "quote"
+        });
+        Swal.fire(
+            "Deleted",
+            `${deletedQuotes.length} quotes removed`,
+            "success"
+        );
     };
 
     /* ---------------- EDIT ---------------- */
 
     const startEdit = (index) => {
-
         setEditingIndex(index);
         setEditValue(quotes[index]);
-
     };
 
     const saveEdit = async () => {
-
         if (!editValue.trim()) return;
-
         const updated = [...quotes];
-
         updated[editingIndex] =
             editValue.trim();
-
         setQuotes(updated);
-
         await setDoc(
             doc(db, "quotes", docId),
             { quote_list: updated }
         );
-
         await logActivity({
-
             actionType: "UPDATE_QUOTE",
-
             description:
                 `Updated quote at position ${editingIndex + 1}`,
-
             entityId: docId,
-
             entityType: "quote"
-
         });
-
         setEditingIndex(null);
         setEditValue("");
-
     };
 
     const cancelEdit = () => {
-
         setEditingIndex(null);
         setEditValue("");
+    };
 
+    /* ---------------- SELECT ---------------- */
+
+    const toggleSelect = (index) => {
+        setSelectedIndexes(prev =>
+            prev.includes(index)
+                ? prev.filter(i => i !== index)
+                : [...prev, index]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIndexes.length === quotes.length) {
+            setSelectedIndexes([]);
+        } else {
+            setSelectedIndexes(
+                quotes.map((_, i) => i)
+            );
+        }
     };
 
     /* ---------------- EXCEL IMPORT ---------------- */
@@ -314,7 +349,7 @@ export default function QuotesSettings() {
                 Daily Quotes Settings
             </h3>
 
-            <div className="flex gap-3 mb-4">
+            <div className="flex gap-3 mb-4 items-center">
 
                 <input
                     type="text"
@@ -338,6 +373,13 @@ export default function QuotesSettings() {
 
                 </label>
 
+                <button
+                    onClick={bulkDeleteQuotes}
+                    className="bg-red-600 text-white px-4 py-2 rounded whitespace-nowrap"
+                >
+                    Bulk Delete
+                </button>
+
             </div>
 
             <div className="flex-1 overflow-y-auto border rounded">
@@ -347,6 +389,16 @@ export default function QuotesSettings() {
                     <thead className="bg-slate-200 sticky top-0">
 
                         <tr>
+                            <th className="p-3 w-[50px]">
+                                <input
+                                    type="checkbox"
+                                    checked={
+                                        selectedIndexes.length === quotes.length &&
+                                        quotes.length > 0
+                                    }
+                                    onChange={toggleSelectAll}
+                                />
+                            </th>
                             <th className="p-3 w-[60px]">#</th>
                             <th className="p-3 text-left">Quote</th>
                             <th className="p-3 w-[180px]">Actions</th>
@@ -359,6 +411,18 @@ export default function QuotesSettings() {
                         {quotes.map((quote, index) => (
 
                             <tr key={index} className="border-t">
+
+                                <td className="p-3 text-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={
+                                            selectedIndexes.includes(index)
+                                        }
+                                        onChange={() =>
+                                            toggleSelect(index)
+                                        }
+                                    />
+                                </td>
 
                                 <td className="p-3 text-center">
                                     {index + 1}

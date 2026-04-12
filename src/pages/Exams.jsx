@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import {
   collection,
   addDoc,
@@ -8,6 +8,9 @@ import {
   doc,
   serverTimestamp,
   onSnapshot,
+  query,
+  where,
+  getDocs
 } from "firebase/firestore";
 import { logActivity } from "../utils/logActivity";
 import Swal from "sweetalert2";
@@ -99,14 +102,26 @@ export default function Exams() {
   /* ---------------- SUBMIT ---------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!formData.name || !formData.year) {
-      Swal.fire("Missing Fields", "Exam Name and Year required", "warning");
+      Swal.fire(
+        "Missing Fields",
+        "Exam Name and Year required",
+        "warning"
+      );
       return;
     }
 
     if (editingExam) {
-      await updateDoc(doc(db, "exams", editingExam.id), formData);
+      await updateDoc(
+        doc(db, "exams", editingExam.id),
+        {
+          ...formData,
+          updatedAt:
+            serverTimestamp(),
+          updatedBy:
+            auth.currentUser?.uid || "admin"
+        }
+      );
 
       // ✅ LOG UPDATE
       await logActivity({
@@ -117,10 +132,14 @@ export default function Exams() {
       });
 
     } else {
-      const ref = await addDoc(collection(db, "exams"), {
-        ...formData,
-        createdAt: serverTimestamp(),
-      });
+      const ref = await addDoc(
+        collection(db, "exams"),
+        {
+          ...formData,
+          createdAt: serverTimestamp(),
+          createdBy: auth.currentUser?.uid || "admin"
+        }
+      );
 
       // ✅ LOG CREATE
       await logActivity({

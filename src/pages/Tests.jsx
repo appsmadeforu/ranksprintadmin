@@ -5,10 +5,19 @@ import {
   onSnapshot,
   deleteDoc,
   doc,
+  getDoc,
+  addDoc
 } from "firebase/firestore";
+
+import {
+  Pencil,
+  Trash2,
+  Copy
+} from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
+import { logActivity } from "../utils/logActivity";
 
 export default function Tests() {
   const navigate = useNavigate();
@@ -54,7 +63,6 @@ export default function Tests() {
   /* ---------------- DELETE TEST ---------------- */
   const handleDelete = async (testId) => {
     if (!selectedExam) return;
-
     const result = await Swal.fire({
       title: "Delete Test?",
       text: "This action cannot be undone.",
@@ -63,18 +71,101 @@ export default function Tests() {
       confirmButtonColor: "#d33",
       confirmButtonText: "Delete",
     });
-
     if (result.isConfirmed) {
+      const testData =
+        tests.find(t => t.id === testId);
       await deleteDoc(
         doc(db, "exams", selectedExam, "tests", testId)
       );
+      /* LOG */
+      await logActivity({
+        actionType: "DELETE_TEST",
+        description:
+          `Deleted test: ${testData?.name || testId}`,
+        entityId: testId,
+        entityType: "test"
+      });
+      Swal.fire(
+        "Deleted!",
+        "Test removed.",
+        "success"
+      );
+    }
+  };
 
-      Swal.fire("Deleted!", "Test removed.", "success");
+  /* ---------------- DUPLICATE TEST ---------------- */
+
+  const handleDuplicate = async (testId) => {
+    if (!selectedExam) return;
+    const confirm =
+      await Swal.fire({
+        title: "Duplicate Test?",
+        text: "A copy of this test will be created.",
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Duplicate"
+      });
+
+    if (!confirm.isConfirmed) return;
+    try {
+      /* GET ORIGINAL */
+      const testRef =
+        doc(
+          db,
+          "exams",
+          selectedExam,
+          "tests",
+          testId
+        );
+      const testSnap =
+        await getDoc(testRef);
+      if (!testSnap.exists()) return;
+      const testData =
+        testSnap.data();
+      /* MODIFY NAME */
+      const newData = {
+        ...testData,
+        name:
+          `${testData.name} (Duplicate)`
+      };
+      /* CREATE NEW TEST */
+      const newDocRef =
+        await addDoc(
+          collection(
+            db,
+            "exams",
+            selectedExam,
+            "tests"
+          ),
+          newData
+        );
+      /* LOG */
+      await logActivity({
+        actionType: "DUPLICATE_TEST",
+        description:
+          `Duplicated test: ${testData.name}`,
+        entityId: newDocRef.id,
+        entityType: "test"
+      });
+      Swal.fire(
+        "Duplicated!",
+        "Test duplicated successfully.",
+        "success"
+      );
+    }
+
+    catch (err) {
+      console.error(err);
+      Swal.fire(
+        "Error",
+        err.message,
+        "error"
+      );
     }
   };
 
   /* ---------------- ADD TEST ---------------- */
-  const handleAddTest = () => {
+  const handleAddTest = async () => {
     if (!selectedExam) {
       Swal.fire({
         icon: "warning",
@@ -84,7 +175,16 @@ export default function Tests() {
       return;
     }
 
-    navigate(`/admin/exams/${selectedExam}/tests/new`);
+    await logActivity({
+      actionType: "NAVIGATE_ADD_TEST",
+      description:
+        `Navigated to create new test in exam ${selectedExam}`,
+      entityId: selectedExam,
+      entityType: "exam"
+    });
+    navigate(
+      `/admin/exams/${selectedExam}/tests/new`
+    );
   };
 
   return (
@@ -171,23 +271,45 @@ export default function Tests() {
                         ?.toLocaleString?.()
                       : "-"}
                   </td>
-                  <td className="p-3 space-x-4">
+                  <td className="p-3 flex gap-4 items-center">
+                    {/* EDIT */}
                     <button
-                      onClick={() =>
+                      title="Edit Test"
+                      onClick={async () => {
+                        await logActivity({
+                          actionType: "EDIT_TEST",
+                          description:
+                            `Editing test: ${test.name}`,
+                          entityId: test.id,
+                          entityType: "test"
+                        });
                         navigate(
                           `/admin/exams/${selectedExam}/tests/${test.id}`
-                        )
-                      }
-                      className="text-indigo-600 hover:underline"
+                        );
+                      }}
+                      className="text-indigo-600 hover:text-indigo-800"
                     >
-                      Edit
+                      <Pencil size={18} />
                     </button>
-
+                    {/* DUPLICATE */}
                     <button
-                      onClick={() => handleDelete(test.id)}
-                      className="text-red-600 hover:underline"
+                      title="Duplicate Test"
+                      onClick={() =>
+                        handleDuplicate(test.id)
+                      }
+                      className="text-blue-600 hover:text-blue-800"
                     >
-                      Delete
+                      <Copy size={18} />
+                    </button>
+                    {/* DELETE */}
+                    <button
+                      title="Delete Test"
+                      onClick={() =>
+                        handleDelete(test.id)
+                      }
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <Trash2 size={18} />
                     </button>
                   </td>
                 </tr>
