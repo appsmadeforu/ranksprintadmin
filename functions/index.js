@@ -2,11 +2,13 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { createQuestionImportHandlers } from "./importPipeline.js";
 
 initializeApp();
 
 const auth = getAuth();
 const db = getFirestore();
+const importHandlers = createQuestionImportHandlers({ db });
 
 export const createAdminUser = onCall(async (request) => {
 
@@ -137,3 +139,9 @@ export const deleteAdminUser = onCall(async (request) => {
   }
 
 });
+
+export const createQuestionImportReview =
+  importHandlers.createQuestionImportReview;
+
+export const finalizeQuestionImport =
+  importHandlers.finalizeQuestionImport;

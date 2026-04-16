@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { db, storage } from "../firebase";
+import { db, storage, functions } from "../firebase";
 import {
   collection,
   addDoc,
@@ -8,12 +8,21 @@ import {
   updateDoc,
   serverTimestamp,
   onSnapshot,
+  query,
+  where,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { httpsCallable } from "firebase/functions";
 import Swal from "sweetalert2";
 import QuillEditor from "./QuillEditor";
 import * as XLSX from "xlsx/xlsx.mjs";
 import ImageDropZone from "./ImageDropZone";
+import { logActivity } from "../utils/logActivity";
+import {
+  normalizeImportedQuestionForFirestore,
+  toAdminReviewShape,
+} from "../utils/importQuestionUtils";
+import { renderMathInHtml } from "../utils/renderMathInHtml";
 
 const ITEMS_PER_PAGE = 20;
 
@@ -31,6 +40,20 @@ export default function QuestionsManager({
   const [bulkJson, setBulkJson] = useState("");
 
   const [optionImages, setOptionImages] = useState([null, null, null, null]);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isFinalizingImport, setIsFinalizingImport] = useState(false);
+  const [reviewImportDoc, setReviewImportDoc] = useState(null);
+  const [reviewQuestions, setReviewQuestions] = useState([]);
+  const [importFile, setImportFile] = useState(null);
+  const [importDefaults, setImportDefaults] = useState({
+    subject: "",
+    sectionId: "",
+    chapter: "Imported",
+    difficulty: "medium",
+    marks: 4,
+    negativeMarks: 1,
+  });
 
   /* PAGINATION & FILTER STATES */
   const [currentPage, setCurrentPage] = useState(1);
@@ -59,6 +82,15 @@ export default function QuestionsManager({
   const [formData, setFormData] = useState(emptyQuestion);
   const [questionImage, setQuestionImage] = useState(null);
   const [explanationImage, setExplanationImage] = useState(null);
+
+  const createQuestionImportReview = useMemo(
+    () => httpsCallable(functions, "createQuestionImportReview"),
+    []
+  );
+  const finalizeQuestionImport = useMemo(
+    () => httpsCallable(functions, "finalizeQuestionImport"),
+    []
+  );
 
   /* ---------------- FETCH QUESTIONS ---------------- */
   useEffect(() => {
@@ -93,6 +125,58 @@ export default function QuestionsManager({
     return () => unsubscribe();
   }, [examId]);
 
+  useEffect(() => {
+    setImportDefaults((prev) => ({
+      ...prev,
+      subject: prev.subject || subjects[0]?.name || "",
+    }));
+  }, [subjects]);
+
+  useEffect(() => {
+    if (!examId || !testId) return;
+
+    const reviewQuery = query(
+      collection(db, "questionImports"),
+      where("examId", "==", examId),
+      where("testId", "==", testId)
+    );
+
+    const unsubscribe = onSnapshot(reviewQuery, (snapshot) => {
+      if (snapshot.empty) {
+        setReviewImportDoc(null);
+        return;
+      }
+
+      const latestImport = snapshot.docs
+        .map((entry) => ({
+          id: entry.id,
+          ...entry.data(),
+        }))
+        .sort((a, b) => {
+          const aTime = a.createdAt?.seconds || 0;
+          const bTime = b.createdAt?.seconds || 0;
+          return bTime - aTime;
+        })[0];
+
+      setReviewImportDoc({
+        ...latestImport,
+      });
+    });
+
+    return () => unsubscribe();
+  }, [examId, testId]);
+
+  useEffect(() => {
+    if (!showImportModal || !Array.isArray(reviewImportDoc?.reviewQuestions)) return;
+
+    setReviewQuestions(
+      reviewImportDoc.reviewQuestions.map((item) => ({
+        ...item,
+        parsedQuestion: toAdminReviewShape(item.parsedQuestion || {}),
+      }))
+    );
+  }, [reviewImportDoc, showImportModal]);
+
   /* ---------------- GET UNIQUE CHAPTERS FOR SELECTED SUBJECT ---------------- */
   const chaptersForSubject = useMemo(() => {
     if (!filterSubject) return [];
@@ -102,6 +186,12 @@ export default function QuestionsManager({
       );
     return subjectObj?.chapters || [];
   }, [filterSubject, subjects]);
+
+  const importChaptersForSubject = useMemo(() => {
+    if (!importDefaults.subject) return [];
+    const subjectObj = subjects.find((s) => s.name === importDefaults.subject);
+    return subjectObj?.chapters || [];
+  }, [importDefaults.subject, subjects]);
 
   /* ---------------- FILTER & SEARCH QUESTIONS ---------------- */
   const filteredQuestions = useMemo(() => {
@@ -363,6 +453,142 @@ export default function QuestionsManager({
     }
   };
 
+  const resetImportState = () => {
+    setImportFile(null);
+    setReviewQuestions([]);
+    setReviewImportDoc(null);
+    setImportDefaults({
+      subject: subjects[0]?.name || "",
+      sectionId: "",
+      chapter: "Imported",
+      difficulty: "medium",
+      marks: 4,
+      negativeMarks: 1,
+    });
+  };
+
+  const openImportModal = () => {
+    setShowImportModal(true);
+    setImportDefaults((prev) => ({
+      ...prev,
+      subject: prev.subject || subjects[0]?.name || "",
+    }));
+  };
+
+  const handleImportUpload = async () => {
+    try {
+      if (!importFile) {
+        return Swal.fire("Select file", "Upload a PDF, TXT, or TEX file first.", "warning");
+      }
+
+      setIsImporting(true);
+      const storagePath = `imports/${examId}/${testId}/${Date.now()}-${importFile.name}`;
+      await uploadBytes(ref(storage, storagePath), importFile);
+
+      const result = await createQuestionImportReview({
+        examId,
+        testId,
+        storagePath,
+        fileName: importFile.name,
+        subject: importDefaults.subject,
+        sectionId: importDefaults.sectionId,
+        chapter: importDefaults.chapter || "Imported",
+        difficulty: importDefaults.difficulty,
+        marks: Number(importDefaults.marks) || 4,
+        negativeMarks: Number(importDefaults.negativeMarks) || 1,
+      });
+
+      await logActivity({
+        actionType: "IMPORT_QUESTIONS_REVIEW_CREATED",
+        description: `Created import review from ${importFile.name}`,
+        entityId: result.data.importId,
+        entityType: "questionImport",
+      });
+
+      Swal.fire(
+        "Import ready",
+        `${result.data.questionCount} question candidates created for review.`,
+        "success"
+      );
+    } catch (err) {
+      Swal.fire("Import failed", err.message, "error");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleReviewFieldChange = (index, field, value) => {
+    setReviewQuestions((prev) =>
+      prev.map((item, currentIndex) =>
+        currentIndex === index
+          ? {
+            ...item,
+            parsedQuestion: {
+              ...item.parsedQuestion,
+              [field]: value,
+            },
+          }
+          : item
+      )
+    );
+  };
+
+  const handleReviewOptionChange = (questionIndex, optionIndex, value) => {
+    setReviewQuestions((prev) =>
+      prev.map((item, currentIndex) => {
+        if (currentIndex !== questionIndex) return item;
+        const nextOptions = [...(item.parsedQuestion.options || [])];
+        nextOptions[optionIndex] = {
+          ...(nextOptions[optionIndex] || { id: ["A", "B", "C", "D"][optionIndex] }),
+          text: value,
+        };
+        return {
+          ...item,
+          parsedQuestion: {
+            ...item.parsedQuestion,
+            options: nextOptions,
+          },
+        };
+      })
+    );
+  };
+
+  const handleFinalizeImport = async () => {
+    try {
+      if (!reviewImportDoc?.id || reviewQuestions.length === 0) {
+        return Swal.fire("Nothing to save", "Create or load an import review first.", "warning");
+      }
+
+      const normalizedQuestions = reviewQuestions.map((item) =>
+        normalizeImportedQuestionForFirestore(item.parsedQuestion)
+      );
+
+      setIsFinalizingImport(true);
+      const result = await finalizeQuestionImport({
+        importId: reviewImportDoc.id,
+        reviewQuestions: normalizedQuestions,
+      });
+
+      await logActivity({
+        actionType: "IMPORT_QUESTIONS_FINALIZED",
+        description: `Imported ${result.data.savedCount} questions into test ${testId}`,
+        entityId: reviewImportDoc.id,
+        entityType: "questionImport",
+      });
+
+      Swal.fire(
+        "Questions imported",
+        `${result.data.savedCount} questions were saved to this test.`,
+        "success"
+      );
+      setShowImportModal(false);
+    } catch (err) {
+      Swal.fire("Save failed", err.message, "error");
+    } finally {
+      setIsFinalizingImport(false);
+    }
+  };
+
   /* ---------------- EXCEL IMPORT ---------------- */
   const handleExcelUpload = async (e) => {
     try {
@@ -456,6 +682,13 @@ export default function QuestionsManager({
               onChange={handleExcelUpload}
             />
           </label>
+
+          <button
+            onClick={openImportModal}
+            className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 transition"
+          >
+            Import Questions
+          </button>
 
           <button
             onClick={() => {
@@ -943,6 +1176,319 @@ export default function QuestionsManager({
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white w-full max-w-6xl rounded-xl shadow max-h-[92vh] overflow-y-auto">
+            <div className="p-6 border-b">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h4 className="text-xl font-bold">Import Questions</h4>
+                  <p className="text-sm text-slate-600 mt-1">
+                    Upload a paper, review parsed questions, then save them into this test.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowImportModal(false);
+                    resetImportState();
+                  }}
+                  className="border px-4 py-2 rounded hover:bg-gray-100 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="font-medium block mb-2">Source File</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.txt,.tex"
+                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                    className="w-full border p-3 rounded"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    Best results come from `.tex` or clean text PDFs. PDFs still go through admin review.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="font-medium block mb-2">Default Subject</label>
+                  <select
+                    className="w-full border p-3 rounded bg-white"
+                    value={importDefaults.subject}
+                    onChange={(e) =>
+                      setImportDefaults((prev) => ({
+                        ...prev,
+                        subject: e.target.value,
+                        chapter: "Imported",
+                      }))
+                    }
+                  >
+                    <option value="">Select Subject</option>
+                    {subjects.map((sub) => (
+                      <option key={sub.id} value={sub.name}>
+                        {sub.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-medium block mb-2">Default Section</label>
+                  <select
+                    className="w-full border p-3 rounded bg-white"
+                    value={importDefaults.sectionId}
+                    onChange={(e) =>
+                      setImportDefaults((prev) => ({
+                        ...prev,
+                        sectionId: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Select Section</option>
+                    {(sections || []).map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-medium block mb-2">Default Chapter</label>
+                  <select
+                    className="w-full border p-3 rounded bg-white"
+                    value={importDefaults.chapter}
+                    onChange={(e) =>
+                      setImportDefaults((prev) => ({
+                        ...prev,
+                        chapter: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="Imported">Imported</option>
+                    {importChaptersForSubject.map((chapter, index) => (
+                      <option key={index} value={chapter}>
+                        {chapter}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-medium block mb-2">Difficulty</label>
+                  <select
+                    className="w-full border p-3 rounded bg-white"
+                    value={importDefaults.difficulty}
+                    onChange={(e) =>
+                      setImportDefaults((prev) => ({
+                        ...prev,
+                        difficulty: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-medium block mb-2">Marks / Negative</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      className="border p-3 rounded"
+                      value={importDefaults.marks}
+                      onChange={(e) =>
+                        setImportDefaults((prev) => ({
+                          ...prev,
+                          marks: e.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      className="border p-3 rounded"
+                      value={importDefaults.negativeMarks}
+                      onChange={(e) =>
+                        setImportDefaults((prev) => ({
+                          ...prev,
+                          negativeMarks: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleImportUpload}
+                  disabled={isImporting}
+                  className="bg-emerald-600 text-white px-5 py-2 rounded hover:bg-emerald-700 transition disabled:opacity-60"
+                >
+                  {isImporting ? "Processing..." : "Upload & Parse"}
+                </button>
+
+                {reviewImportDoc && (
+                  <div className="text-sm text-slate-600 self-center">
+                    Latest review: {reviewImportDoc.fileName || "Imported file"} | {reviewImportDoc.questionCount || 0} candidates
+                  </div>
+                )}
+              </div>
+
+              {reviewQuestions.length > 0 && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="font-semibold text-lg">Admin Review</h5>
+                      <p className="text-sm text-slate-600">
+                        Edit any parsed field before saving to Firestore.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleFinalizeImport}
+                      disabled={isFinalizingImport}
+                      className="bg-indigo-600 text-white px-5 py-2 rounded hover:bg-indigo-700 transition disabled:opacity-60"
+                    >
+                      {isFinalizingImport ? "Saving..." : "Approve & Save"}
+                    </button>
+                  </div>
+
+                  {reviewQuestions.map((item, index) => (
+                    <div key={item.importIndex ?? index} className="border rounded-xl p-5 bg-slate-50 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h6 className="font-semibold">Question {index + 1}</h6>
+                        <div className="flex gap-2 flex-wrap">
+                          {(item.warnings || []).map((warning, warningIndex) => (
+                            <span
+                              key={warningIndex}
+                              className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800"
+                            >
+                              {warning}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <select
+                          className="border p-2 rounded bg-white"
+                          value={item.parsedQuestion.subject}
+                          onChange={(e) => handleReviewFieldChange(index, "subject", e.target.value)}
+                        >
+                          <option value="">Select Subject</option>
+                          {subjects.map((sub) => (
+                            <option key={sub.id} value={sub.name}>
+                              {sub.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          className="border p-2 rounded bg-white"
+                          value={item.parsedQuestion.sectionId}
+                          onChange={(e) => handleReviewFieldChange(index, "sectionId", e.target.value)}
+                        >
+                          <option value="">Select Section</option>
+                          {(sections || []).map((sec) => (
+                            <option key={sec.id} value={sec.id}>
+                              {sec.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <input
+                          className="border p-2 rounded"
+                          value={item.parsedQuestion.chapter}
+                          onChange={(e) => handleReviewFieldChange(index, "chapter", e.target.value)}
+                          placeholder="Chapter"
+                        />
+
+                        <select
+                          className="border p-2 rounded bg-white"
+                          value={item.parsedQuestion.correctOption}
+                          onChange={(e) => handleReviewFieldChange(index, "correctOption", e.target.value)}
+                        >
+                          {["A", "B", "C", "D"].map((letter) => (
+                            <option key={letter} value={letter}>
+                              Correct: {letter}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="font-medium block mb-2">Question Text</label>
+                        <QuillEditor
+                          value={item.parsedQuestion.questionText}
+                          onChange={(value) => handleReviewFieldChange(index, "questionText", value)}
+                        />
+                        <div
+                          className="mt-3 p-3 rounded border bg-white text-sm"
+                          dangerouslySetInnerHTML={{
+                            __html: renderMathInHtml(item.parsedQuestion.questionText),
+                          }}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(item.parsedQuestion.options || []).map((option, optionIndex) => (
+                          <div key={option.id || optionIndex}>
+                            <label className="font-medium block mb-2">
+                              Option {option.id || ["A", "B", "C", "D"][optionIndex]}
+                            </label>
+                            <QuillEditor
+                              value={option.text}
+                              onChange={(value) => handleReviewOptionChange(index, optionIndex, value)}
+                            />
+                            <div
+                              className="mt-3 p-3 rounded border bg-white text-sm"
+                              dangerouslySetInnerHTML={{
+                                __html: renderMathInHtml(option.text),
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <div>
+                        <label className="font-medium block mb-2">Explanation</label>
+                        <QuillEditor
+                          value={item.parsedQuestion.explanationText}
+                          onChange={(value) => handleReviewFieldChange(index, "explanationText", value)}
+                        />
+                        <div
+                          className="mt-3 p-3 rounded border bg-white text-sm"
+                          dangerouslySetInnerHTML={{
+                            __html: renderMathInHtml(item.parsedQuestion.explanationText),
+                          }}
+                        />
+                      </div>
+
+                      <details className="bg-white border rounded p-3">
+                        <summary className="cursor-pointer font-medium text-sm">
+                          Source Text
+                        </summary>
+                        <pre className="mt-3 whitespace-pre-wrap text-xs text-slate-700">
+                          {item.sourceText}
+                        </pre>
+                      </details>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
