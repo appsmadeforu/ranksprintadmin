@@ -145,3 +145,6 @@ export const createQuestionImportReview =
 
 export const finalizeQuestionImport =
   importHandlers.finalizeQuestionImport;
+
+export const runQuestionImportOcr =
+  importHandlers.runQuestionImportOcr;

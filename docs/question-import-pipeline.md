@@ -118,6 +118,7 @@ Added in `functions/importPipeline.js`:
 
 - `createQuestionImportReview`
 - `finalizeQuestionImport`
+- `runQuestionImportOcr`
 
 Wire them from `functions/index.js` and call them from the admin panel.
 
@@ -164,6 +165,21 @@ export async function uploadAndCreateImport({
 - Set a hard max file size for callable processing.
 - Move OCR-heavy scanned PDF handling to Cloud Run if needed.
 - Never write directly into final question docs without review.
+
+## Free OCR fallback
+
+This repo now includes a free OCR scaffold in [ocr-service/README.md](/c:/Users/sofiyarao/Projects/ranksprintadmin/ocr-service/README.md).
+
+Flow:
+
+1. A scanned PDF is uploaded.
+2. `createQuestionImportReview` marks it as `ocr_required`.
+3. Admin clicks `Run Free OCR`.
+4. `runQuestionImportOcr` calls the Cloud Run OCR service.
+5. OCR text is written back to `questionImports/{importId}`.
+6. The same review UI is reused before final save.
+
+This uses open-source `Tesseract`, so cost is mainly just Cloud Run compute.
 
 ## Next integration steps
 

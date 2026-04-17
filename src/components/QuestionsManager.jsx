@@ -43,6 +43,7 @@ export default function QuestionsManager({
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isFinalizingImport, setIsFinalizingImport] = useState(false);
+  const [isRunningOcr, setIsRunningOcr] = useState(false);
   const [reviewImportDoc, setReviewImportDoc] = useState(null);
   const [reviewQuestions, setReviewQuestions] = useState([]);
   const [importFile, setImportFile] = useState(null);
@@ -53,6 +54,8 @@ export default function QuestionsManager({
     difficulty: "medium",
     marks: 4,
     negativeMarks: 1,
+    pageStart: 1,
+    pageEnd: "",
   });
 
   /* PAGINATION & FILTER STATES */
@@ -89,6 +92,10 @@ export default function QuestionsManager({
   );
   const finalizeQuestionImport = useMemo(
     () => httpsCallable(functions, "finalizeQuestionImport"),
+    []
+  );
+  const runQuestionImportOcr = useMemo(
+    () => httpsCallable(functions, "runQuestionImportOcr"),
     []
   );
 
@@ -464,6 +471,8 @@ export default function QuestionsManager({
       difficulty: "medium",
       marks: 4,
       negativeMarks: 1,
+      pageStart: 1,
+      pageEnd: "",
     });
   };
 
@@ -477,13 +486,21 @@ export default function QuestionsManager({
 
   const handleImportUpload = async () => {
     try {
+      console.log("[import-ui] starting upload", {
+        examId,
+        testId,
+        fileName: importFile?.name || null,
+        importDefaults,
+      });
       if (!importFile) {
         return Swal.fire("Select file", "Upload a PDF, TXT, or TEX file first.", "warning");
       }
 
       setIsImporting(true);
       const storagePath = `imports/${examId}/${testId}/${Date.now()}-${importFile.name}`;
+      console.log("[import-ui] uploading file to storage", { storagePath });
       await uploadBytes(ref(storage, storagePath), importFile);
+      console.log("[import-ui] file uploaded, calling function", { storagePath });
 
       const result = await createQuestionImportReview({
         examId,
@@ -496,6 +513,8 @@ export default function QuestionsManager({
         difficulty: importDefaults.difficulty,
         marks: Number(importDefaults.marks) || 4,
         negativeMarks: Number(importDefaults.negativeMarks) || 1,
+        pageStart: Number(importDefaults.pageStart) || 1,
+        pageEnd: importDefaults.pageEnd ? Number(importDefaults.pageEnd) : null,
       });
 
       await logActivity({
@@ -506,11 +525,19 @@ export default function QuestionsManager({
       });
 
       Swal.fire(
-        "Import ready",
-        `${result.data.questionCount} question candidates created for review.`,
-        "success"
+        result.data.status === "ocr_required" ? "OCR Required" : "Import ready",
+        result.data.status === "ocr_required"
+          ? (result.data.statusMessage || "No selectable text was found in this file.")
+          : `${result.data.questionCount} question candidates created for review.`,
+        result.data.status === "ocr_required" ? "info" : "success"
       );
+      console.log("[import-ui] import review created", {
+        importId: result.data.importId,
+        questionCount: result.data.questionCount,
+        status: result.data.status,
+      });
     } catch (err) {
+      console.error("[import-ui] import failed", err);
       Swal.fire("Import failed", err.message, "error");
     } finally {
       setIsImporting(false);
@@ -555,6 +582,10 @@ export default function QuestionsManager({
 
   const handleFinalizeImport = async () => {
     try {
+      console.log("[import-ui] finalizing import", {
+        importId: reviewImportDoc?.id || null,
+        reviewQuestionCount: reviewQuestions.length,
+      });
       if (!reviewImportDoc?.id || reviewQuestions.length === 0) {
         return Swal.fire("Nothing to save", "Create or load an import review first.", "warning");
       }
@@ -567,6 +598,10 @@ export default function QuestionsManager({
       const result = await finalizeQuestionImport({
         importId: reviewImportDoc.id,
         reviewQuestions: normalizedQuestions,
+      });
+      console.log("[import-ui] finalize complete", {
+        importId: reviewImportDoc.id,
+        savedCount: result.data.savedCount,
       });
 
       await logActivity({
@@ -583,9 +618,41 @@ export default function QuestionsManager({
       );
       setShowImportModal(false);
     } catch (err) {
+      console.error("[import-ui] finalize failed", err);
       Swal.fire("Save failed", err.message, "error");
     } finally {
       setIsFinalizingImport(false);
+    }
+  };
+
+  const handleRunOcr = async () => {
+    try {
+      if (!reviewImportDoc?.id) {
+        return Swal.fire("No import", "Create or load an OCR-required import first.", "warning");
+      }
+
+      setIsRunningOcr(true);
+      console.log("[import-ui] starting OCR", {
+        importId: reviewImportDoc.id,
+      });
+
+      const result = await runQuestionImportOcr({
+        importId: reviewImportDoc.id,
+      });
+
+      console.log("[import-ui] OCR completed", result.data);
+      Swal.fire(
+        result.data.status === "needs_review" ? "OCR complete" : "OCR finished",
+        result.data.status === "needs_review"
+          ? `${result.data.questionCount} question candidates are ready for review.`
+          : "OCR ran but did not produce enough usable text.",
+        result.data.status === "needs_review" ? "success" : "info"
+      );
+    } catch (err) {
+      console.error("[import-ui] OCR failed", err);
+      Swal.fire("OCR failed", err.message, "error");
+    } finally {
+      setIsRunningOcr(false);
     }
   };
 
@@ -1329,6 +1396,41 @@ export default function QuestionsManager({
                     />
                   </div>
                 </div>
+
+                <div>
+                  <label className="font-medium block mb-2">Start / End Page</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      className="border p-3 rounded"
+                      value={importDefaults.pageStart}
+                      onChange={(e) =>
+                        setImportDefaults((prev) => ({
+                          ...prev,
+                          pageStart: e.target.value,
+                        }))
+                      }
+                      placeholder="Start page"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      className="border p-3 rounded"
+                      value={importDefaults.pageEnd}
+                      onChange={(e) =>
+                        setImportDefaults((prev) => ({
+                          ...prev,
+                          pageEnd: e.target.value,
+                        }))
+                      }
+                      placeholder="End page (optional)"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Useful for skipping cover pages, instructions, or answer keys in PDFs.
+                  </p>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -1342,10 +1444,51 @@ export default function QuestionsManager({
 
                 {reviewImportDoc && (
                   <div className="text-sm text-slate-600 self-center">
-                    Latest review: {reviewImportDoc.fileName || "Imported file"} | {reviewImportDoc.questionCount || 0} candidates
+                    Latest review: {reviewImportDoc.fileName || "Imported file"} | {reviewImportDoc.status || "unknown"} | {reviewImportDoc.questionCount || 0} candidates
                   </div>
                 )}
               </div>
+
+              {reviewImportDoc?.status === "ocr_required" && (
+                <div className="border border-amber-300 bg-amber-50 text-amber-900 rounded-lg p-4">
+                  <p className="font-medium">This file needs OCR before questions can be parsed.</p>
+                  <p className="text-sm mt-1">
+                    {reviewImportDoc.statusMessage || "No selectable text was found in this file."}
+                  </p>
+                  <button
+                    onClick={handleRunOcr}
+                    disabled={isRunningOcr}
+                    className="mt-4 bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 transition disabled:opacity-60"
+                  >
+                    {isRunningOcr ? "Running OCR..." : "Run Free OCR"}
+                  </button>
+                </div>
+              )}
+
+              {reviewImportDoc?.status === "ocr_processing" && (
+                <div className="border border-blue-300 bg-blue-50 text-blue-900 rounded-lg p-4">
+                  <p className="font-medium">OCR is in progress.</p>
+                  <p className="text-sm mt-1">
+                    {reviewImportDoc.statusMessage || "The scanned PDF is being processed with free OCR."}
+                  </p>
+                </div>
+              )}
+
+              {reviewImportDoc?.status === "ocr_failed" && (
+                <div className="border border-red-300 bg-red-50 text-red-900 rounded-lg p-4">
+                  <p className="font-medium">OCR failed.</p>
+                  <p className="text-sm mt-1">
+                    {reviewImportDoc.statusMessage || "The OCR service could not extract usable text."}
+                  </p>
+                  <button
+                    onClick={handleRunOcr}
+                    disabled={isRunningOcr}
+                    className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition disabled:opacity-60"
+                  >
+                    {isRunningOcr ? "Retrying..." : "Retry OCR"}
+                  </button>
+                </div>
+              )}
 
               {reviewQuestions.length > 0 && (
                 <div className="space-y-5">
