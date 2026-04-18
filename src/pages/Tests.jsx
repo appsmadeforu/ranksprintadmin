@@ -6,7 +6,9 @@ import {
   deleteDoc,
   doc,
   getDoc,
-  addDoc
+  getDocs,
+  addDoc,
+  setDoc
 } from "firebase/firestore";
 
 import {
@@ -96,19 +98,24 @@ export default function Tests() {
   /* ---------------- DUPLICATE TEST ---------------- */
 
   const handleDuplicate = async (testId) => {
+
     if (!selectedExam) return;
+
     const confirm =
       await Swal.fire({
         title: "Duplicate Test?",
-        text: "A copy of this test will be created.",
+        text: "Test and sections will be copied (questions excluded).",
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Duplicate"
       });
 
     if (!confirm.isConfirmed) return;
+
     try {
-      /* GET ORIGINAL */
+
+      /* ---------------- GET ORIGINAL TEST ---------------- */
+
       const testRef =
         doc(
           db,
@@ -117,19 +124,25 @@ export default function Tests() {
           "tests",
           testId
         );
+
       const testSnap =
         await getDoc(testRef);
+
       if (!testSnap.exists()) return;
+
       const testData =
         testSnap.data();
-      /* MODIFY NAME */
-      const newData = {
+
+      /* ---------------- CREATE NEW TEST ---------------- */
+
+      const newTestData = {
         ...testData,
         name:
-          `${testData.name} (Duplicate)`
+          `${testData.name} (Duplicate)`,
+        createdAt:
+          new Date()
       };
-      /* CREATE NEW TEST */
-      const newDocRef =
+      const newTestRef =
         await addDoc(
           collection(
             db,
@@ -137,23 +150,64 @@ export default function Tests() {
             selectedExam,
             "tests"
           ),
-          newData
+          newTestData
         );
-      /* LOG */
+      const newTestId =
+        newTestRef.id;
+
+      /* ---------------- DUPLICATE SECTIONS ---------------- */
+
+      const sectionsSnap =
+        await getDocs(
+          collection(
+            db,
+            "exams",
+            selectedExam,
+            "tests",
+            testId,
+            "sections"
+          )
+        );
+      for (let sectionDoc of sectionsSnap.docs) {
+        const sectionData =
+          sectionDoc.data();
+        /* Create new section */
+        await setDoc(
+          doc(
+            db,
+            "exams",
+            selectedExam,
+            "tests",
+            newTestId,
+            "sections",
+            sectionDoc.id
+          ),
+          {
+            ...sectionData,
+            createdAt:
+              new Date()
+          }
+        );
+      }
+
+      /* ---------------- LOG ---------------- */
+
       await logActivity({
-        actionType: "DUPLICATE_TEST",
+        actionType:
+          "DUPLICATE_TEST",
         description:
-          `Duplicated test: ${testData.name}`,
-        entityId: newDocRef.id,
-        entityType: "test"
+          `Duplicated test with sections: ${testData.name}`,
+        entityId:
+          newTestId,
+        entityType:
+          "test"
       });
       Swal.fire(
         "Duplicated!",
-        "Test duplicated successfully.",
+        "Test and sections copied successfully.",
         "success"
       );
     }
-
     catch (err) {
       console.error(err);
       Swal.fire(
