@@ -11,6 +11,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import Swal from "sweetalert2";
+import * as XLSX from "xlsx/xlsx.mjs";
 import { logActivity } from "../utils/logActivity";
 
 const ITEMS_PER_PAGE = 20;
@@ -340,6 +341,168 @@ export default function SubjectsManager() {
 
   };
 
+  /* ---------------- BULK UPLOAD ---------------- */
+
+  const handleBulkUpload = async (e) => {
+
+    if (!selectedExam)
+      return Swal.fire("Error", "Select Exam first", "error");
+
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+
+      const data = await file.arrayBuffer();
+
+      const workbook =
+        XLSX.read(data);
+
+      const sheet =
+        workbook.Sheets[workbook.SheetNames[0]];
+
+      const rows =
+        XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      /* REMOVE HEADER */
+      rows.shift();
+
+      /* GROUP SUBJECTS */
+
+      const subjectMap = {};
+
+      rows.forEach(row => {
+
+        const subject =
+          row[0]?.toString().trim();
+
+        const chapter =
+          row[1]?.toString().trim();
+
+        if (!subject || !chapter) return;
+
+        if (!subjectMap[subject])
+          subjectMap[subject] = [];
+
+        if (!subjectMap[subject].includes(chapter))
+          subjectMap[subject].push(chapter);
+
+      });
+
+      /* FETCH EXISTING SUBJECTS */
+
+      const existingSnap =
+        await getDocs(
+          collection(
+            db,
+            "exams",
+            selectedExam,
+            "subjects"
+          )
+        );
+
+      const existingSubjects =
+        existingSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      /* SAVE DATA */
+
+      for (let subjectName in subjectMap) {
+
+        const chaptersList =
+          subjectMap[subjectName];
+
+        const existing =
+          existingSubjects.find(
+            s =>
+              s.name.toLowerCase() ===
+              subjectName.toLowerCase()
+          );
+
+        if (existing) {
+
+          /* MERGE CHAPTERS */
+
+          const mergedChapters =
+            [
+              ...(existing.chapters || []),
+              ...chaptersList
+            ];
+
+          const uniqueChapters =
+            [...new Set(mergedChapters)];
+
+          await updateDoc(
+            doc(
+              db,
+              "exams",
+              selectedExam,
+              "subjects",
+              existing.id
+            ),
+            {
+              chapters: uniqueChapters,
+              updatedAt: serverTimestamp()
+            }
+          );
+
+          updatedCount++;
+
+        } else {
+
+          const ref =
+            await addDoc(
+              collection(
+                db,
+                "exams",
+                selectedExam,
+                "subjects"
+              ),
+              {
+                name: subjectName,
+                chapters: chaptersList,
+                createdAt: serverTimestamp()
+              }
+            );
+
+          await logActivity({
+            actionType: "BULK_CREATE_SUBJECT",
+            description: `Bulk added subject ${subjectName}`,
+            entityId: ref.id,
+            entityType: "subject"
+          });
+
+          createdCount++;
+
+        }
+
+      }
+
+      Swal.fire(
+        "Success",
+        `Created: ${createdCount}, Updated: ${updatedCount}`,
+        "success"
+      );
+
+    } catch (err) {
+
+      console.error(err);
+
+      Swal.fire(
+        "Error",
+        err.message,
+        "error"
+      );
+
+    }
+
+  };
+
   /* ---------------- UI ---------------- */
 
   return (
@@ -400,12 +563,28 @@ export default function SubjectsManager() {
 
         <div className="bg-white p-6 rounded-xl shadow mb-8 space-y-4">
 
-          <div>
+          <div className="flex items-center gap-3">
+            {/* HIDDEN INPUT */}
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleBulkUpload}
+              id="excelUpload"
+              className="hidden"
+            />
+            {/* BUTTON */}
+            <label
+              htmlFor="excelUpload"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold cursor-pointer transition"
+            >
+              Upload Excel
+            </label>
+          </div>
 
+          <div>
             <label className="font-semibold block mb-2">
               Subject Name
             </label>
-
             <input
               className="border p-3 rounded w-full"
               value={subjectName}
@@ -413,15 +592,12 @@ export default function SubjectsManager() {
                 setSubjectName(e.target.value)
               }
             />
-
           </div>
 
           <div>
-
             <label className="font-semibold block mb-2">
               Add Chapter
             </label>
-
             <input
               className="border p-3 rounded w-full"
               placeholder="Press Enter to add chapter"
@@ -430,17 +606,12 @@ export default function SubjectsManager() {
                 setChapterInput(e.target.value)
               }
               onKeyDown={(e) => {
-
                 if (e.key === "Enter") {
-
                   e.preventDefault();
                   addChapter();
-
                 }
-
               }}
             />
-
           </div>
 
           {chapters.length > 0 && (
