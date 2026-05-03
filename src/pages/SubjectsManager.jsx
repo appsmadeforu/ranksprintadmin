@@ -11,6 +11,7 @@ import {
   getDocs
 } from "firebase/firestore";
 import Swal from "sweetalert2";
+import * as XLSX from "xlsx/xlsx.mjs";
 import { logActivity } from "../utils/logActivity";
 
 const ITEMS_PER_PAGE = 20;
@@ -340,22 +341,136 @@ export default function SubjectsManager() {
 
   };
 
+  /* ---------------- BULK UPLOAD ---------------- */
+
+  const handleBulkUpload = async (e) => {
+    if (!selectedExam)
+      return Swal.fire("Error", "Select Exam first", "error");
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const data = await file.arrayBuffer();
+      const workbook =
+        XLSX.read(data);
+      const sheet =
+        workbook.Sheets[workbook.SheetNames[0]];
+      const rows =
+        XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      /* REMOVE HEADER */
+      rows.shift();
+      /* GROUP SUBJECTS */
+      const subjectMap = {};
+      rows.forEach(row => {
+        const subject =
+          row[0]?.toString().trim();
+        const chapter =
+          row[1]?.toString().trim();
+        if (!subject || !chapter) return;
+        if (!subjectMap[subject])
+          subjectMap[subject] = [];
+        if (!subjectMap[subject].includes(chapter))
+          subjectMap[subject].push(chapter);
+      });
+
+      /* FETCH EXISTING SUBJECTS */
+      const existingSnap =
+        await getDocs(
+          collection(
+            db,
+            "exams",
+            selectedExam,
+            "subjects"
+          )
+        );
+      const existingSubjects =
+        existingSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      let createdCount = 0;
+      let updatedCount = 0;
+      /* SAVE DATA */
+      for (let subjectName in subjectMap) {
+        const chaptersList =
+          subjectMap[subjectName];
+        const existing =
+          existingSubjects.find(
+            s =>
+              s.name.toLowerCase() ===
+              subjectName.toLowerCase()
+          );
+        if (existing) {
+          /* MERGE CHAPTERS */
+          const mergedChapters =
+            [
+              ...(existing.chapters || []),
+              ...chaptersList
+            ];
+          const uniqueChapters =
+            [...new Set(mergedChapters)];
+          await updateDoc(
+            doc(
+              db,
+              "exams",
+              selectedExam,
+              "subjects",
+              existing.id
+            ),
+            {
+              chapters: uniqueChapters,
+              updatedAt: serverTimestamp()
+            }
+          );
+          updatedCount++;
+        } else {
+          const ref =
+            await addDoc(
+              collection(
+                db,
+                "exams",
+                selectedExam,
+                "subjects"
+              ),
+              {
+                name: subjectName,
+                chapters: chaptersList,
+                createdAt: serverTimestamp()
+              }
+            );
+          await logActivity({
+            actionType: "BULK_CREATE_SUBJECT",
+            description: `Bulk added subject ${subjectName}`,
+            entityId: ref.id,
+            entityType: "subject"
+          });
+          createdCount++;
+        }
+      }
+      Swal.fire(
+        "Success",
+        `Created: ${createdCount}, Updated: ${updatedCount}`,
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      Swal.fire(
+        "Error",
+        err.message,
+        "error"
+      );
+    }
+  };
+
   /* ---------------- UI ---------------- */
 
   return (
 
     <div className="p-10 bg-slate-100 min-h-screen">
-
       <h2 className="text-2xl font-bold mb-6">
-
         Subjects & Chapters
-
       </h2>
-
       {/* SELECT EXAM */}
-
       <div className="mb-6">
-
         <label className="font-semibold block mb-2">
           Select Exam
         </label>
@@ -378,34 +493,42 @@ export default function SubjectsManager() {
           </option>
 
           {exams.map(exam => (
-
             <option
               key={exam.id}
               value={exam.id}
             >
-
               {exam.name}
-
             </option>
-
           ))}
-
         </select>
-
       </div>
 
       {/* ADD FORM */}
 
       {selectedExam && (
-
         <div className="bg-white p-6 rounded-xl shadow mb-8 space-y-4">
+          <div className="flex items-center gap-3">
+            {/* HIDDEN INPUT */}
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleBulkUpload}
+              id="excelUpload"
+              className="hidden"
+            />
+            {/* BUTTON */}
+            <label
+              htmlFor="excelUpload"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold cursor-pointer transition"
+            >
+              Upload Excel
+            </label>
+          </div>
 
           <div>
-
             <label className="font-semibold block mb-2">
               Subject Name
             </label>
-
             <input
               className="border p-3 rounded w-full"
               value={subjectName}
@@ -413,15 +536,12 @@ export default function SubjectsManager() {
                 setSubjectName(e.target.value)
               }
             />
-
           </div>
 
           <div>
-
             <label className="font-semibold block mb-2">
               Add Chapter
             </label>
-
             <input
               className="border p-3 rounded w-full"
               placeholder="Press Enter to add chapter"
@@ -430,32 +550,22 @@ export default function SubjectsManager() {
                 setChapterInput(e.target.value)
               }
               onKeyDown={(e) => {
-
                 if (e.key === "Enter") {
-
                   e.preventDefault();
                   addChapter();
-
                 }
-
               }}
             />
-
           </div>
 
           {chapters.length > 0 && (
-
             <div className="space-y-2">
-
               {chapters.map((ch, i) => (
-
                 <div
                   key={i}
                   className="flex justify-between bg-slate-100 p-3 rounded"
                 >
-
                   {ch}
-
                   <button
                     onClick={() =>
                       removeChapter(i)
@@ -464,49 +574,35 @@ export default function SubjectsManager() {
                   >
                     Remove
                   </button>
-
                 </div>
-
               ))}
-
             </div>
-
           )}
-
           <div className="flex gap-3">
-
             <button
               onClick={handleSave}
               className="bg-green-600 text-white px-6 py-2 rounded"
             >
-
               {editingId
                 ? "Update Subject"
                 : "Save Subject"}
-
             </button>
 
             {editingId && (
-
               <button
                 onClick={handleCancelEdit}
                 className="border px-6 py-2 rounded"
               >
                 Cancel
               </button>
-
             )}
-
           </div>
-
         </div>
-
       )}
 
       {/* SUBJECT COUNTS */}
       {selectedExam && (
         <div className="mb-4 flex gap-6">
-
           <div className="font-semibold">
             Total Subjects:
             <span className="text-indigo-600 ml-2">
@@ -520,68 +616,46 @@ export default function SubjectsManager() {
               {totalChapters}
             </span>
           </div>
-
         </div>
       )}
 
       {/* SUBJECT TABLE */}
       {selectedExam && (
         <div className="bg-white rounded-xl shadow">
-
           <table className="w-full text-left">
-
             <thead className="bg-slate-200">
-
               <tr>
-
                 <th className="p-3">
                   Subject
                 </th>
-
                 <th className="p-3">
                   Chapters
                 </th>
-
                 <th className="p-3">
                   Actions
                 </th>
-
               </tr>
-
             </thead>
-
             <tbody>
-
               {paginatedSubjects.map(sub => (
-
                 <tr
                   key={sub.id}
                   className="border-t"
                 >
-
                   <td className="p-3 font-semibold">
                     {sub.name}
                   </td>
-
                   <td className="p-3">
-
                     {sub.chapters?.map((ch, i) => (
-
                       <span
                         key={i}
                         className="inline-block bg-slate-100 px-3 py-1 rounded mr-2 mb-1"
                       >
-
                         {ch}
-
                       </span>
-
                     ))}
-
                   </td>
-
                   <td className="p-3 space-x-4">
-
                     <button
                       onClick={() =>
                         handleEdit(sub)
@@ -601,20 +675,12 @@ export default function SubjectsManager() {
                     </button>
 
                   </td>
-
                 </tr>
-
               ))}
-
             </tbody>
-
           </table>
-
         </div>
       )}
-
     </div>
-
   );
-
 }

@@ -34,7 +34,7 @@ export default function SubscriptionPlans() {
     durationDays: 30,
     price: 0,
     examsIncluded: {},
-    storeProductId: "",
+    playBasePlanId: "",
     isActive: true,
   });
 
@@ -173,7 +173,7 @@ export default function SubscriptionPlans() {
       durationDays: 30,
       price: 0,
       examsIncluded: {},
-      storeProductId: "",
+      playBasePlanId: "",
       isActive: true,
     });
     setEditingPlan(null);
@@ -194,7 +194,8 @@ export default function SubscriptionPlans() {
         name: formData.name,
         durationDays: formData.durationDays,
         price: formData.price,
-        storeProductId: formData.storeProductId,
+        storeProductId: "ranksprintai_premium",
+        playBasePlanId: formData.playBasePlanId,
         isActive: formData.isActive,
         examsIncluded: formData.examsIncluded,
       };
@@ -513,7 +514,7 @@ export default function SubscriptionPlans() {
               durationDays: 30,
               price: 0,
               examsIncluded: {},
-              storeProductId: "",
+              playBasePlanId: "",
               isActive: true,
             });
             setSelectedExamForEdit("");
@@ -579,7 +580,7 @@ export default function SubscriptionPlans() {
                         durationDays: plan.durationDays || 30,
                         price: plan.price || 0,
                         examsIncluded: plan.examsIncluded || {},
-                        storeProductId: plan.storeProductId || "",
+                        playBasePlanId: plan.playBasePlanId || "",
                         isActive: plan.isActive ?? true,
                       });
                       setSelectedExamForEdit("");
@@ -865,16 +866,16 @@ export default function SubscriptionPlans() {
               {/* PRODUCT ID */}
               <div>
                 <label className="block font-semibold mb-2 text-slate-700">
-                  Product Id
+                  PlayBase Plan ID
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter Store Product ID"
-                  value={formData.storeProductId}
+                  placeholder="Enter PlayBase Plan ID"
+                  value={formData.playBasePlanId}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      storeProductId: e.target.value,
+                      playBasePlanId: e.target.value,
                     })
                   }
                   className="w-full border p-3 rounded focus:outline-none focus:ring-2 focus:ring-indigo-600"
