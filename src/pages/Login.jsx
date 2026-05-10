@@ -38,7 +38,52 @@ export default function Login() {
         return;
       }
 
-      navigate("/admin");
+      const adminData = adminDoc.data();
+
+      // ✅ REDIRECT BASED ON ROLE & PERMISSIONS
+      if (adminData.role === "superadmin") {
+        // Superadmin has all access - redirect to Dashboard
+        navigate("/admin");
+      } else if (adminData.role === "editor") {
+        // Editor - check if has dashboard permission
+        if (adminData.permissions?.includes("dashboard")) {
+          navigate("/admin");
+        } else {
+          // If no dashboard access, redirect to first available page
+          const availablePages = [
+            { perm: "exams", path: "/admin/exams" },
+            { perm: "tests", path: "/admin/tests" },
+            { perm: "pyqs", path: "/admin/pyqs" },
+            { perm: "questions", path: "/admin/questions" },
+            { perm: "users", path: "/admin/users" },
+            { perm: "results", path: "/admin/results" },
+            { perm: "subscriptions", path: "/admin/subscriptions" },
+            { perm: "notifications", path: "/admin/notifications" },
+            { perm: "user-groups", path: "/admin/user-groups" },
+            { perm: "staticData", path: "/admin/static-data" },
+            { perm: "settings", path: "/admin/settings" },
+            { perm: "activity-logs", path: "/admin/activity-logs" }
+          ];
+
+          const firstAvailable = availablePages.find(page =>
+            adminData.permissions?.includes(page.perm)
+          );
+
+          if (firstAvailable) {
+            navigate(firstAvailable.path);
+          } else {
+            await signOut(auth);
+            alert("You do not have access to any admin pages.");
+            setLoading(false);
+            return;
+          }
+        }
+      } else {
+        await signOut(auth);
+        alert("Invalid admin role.");
+        setLoading(false);
+        return;
+      }
 
     } catch (err) {
       alert(err.message);

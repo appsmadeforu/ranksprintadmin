@@ -4,6 +4,7 @@ import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import rankSprintLogo from "../assets/rankSprintLogo.png";
+import UserStaticData from "../pages/UserStaticData";
 
 import {
   LayoutDashboard,
@@ -87,6 +88,8 @@ export default function DashboardLayout() {
     { perm: "notifications", path: "/admin/notifications", icon: Bell, label: "Notifications" },
     { perm: "activity-logs", path: "/admin/activity-logs", icon: Logs, label: "Activity Logs" },
     { perm: "settings", path: "/admin/settings", icon: Settings, label: "Settings" },
+    { perm: "staticData", path: "/admin/static-data", icon: Settings, label: "User Static Data" },
+    { perm: "reports", path: "/admin/reports-from-users", icon: FileText, label: "User Reports" }
   ];
 
   return (

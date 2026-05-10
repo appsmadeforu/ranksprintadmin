@@ -19,7 +19,9 @@ const ALL_PERMISSIONS = [
   "notifications",
   "user-groups",
   "activity-logs",
-  "settings"
+  "staticData",
+  "settings",
+  "reports"
 ];
 
 export default function AdminManager() {

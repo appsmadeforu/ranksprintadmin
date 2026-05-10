@@ -20,6 +20,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { logActivity } from "../utils/logActivity";
+import { useSearchParams } from "react-router-dom";
 
 export default function Tests() {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ export default function Tests() {
   const [exams, setExams] = useState([]);
   const [selectedExam, setSelectedExam] = useState("");
   const [tests, setTests] = useState([]);
+  const [searchParams] = useSearchParams();
 
   /* ---------------- FETCH EXAMS ---------------- */
   useEffect(() => {
@@ -61,6 +63,14 @@ export default function Tests() {
 
     return () => unsubscribe();
   }, [selectedExam]);
+
+  useEffect(() => {
+    // ✅ Check if exam is passed in URL query params
+    const examIdFromURL = searchParams.get("exam");
+    if (examIdFromURL) {
+      setSelectedExam(examIdFromURL);
+    }
+  }, [searchParams]);
 
   /* ---------------- DELETE TEST ---------------- */
   const handleDelete = async (testId) => {

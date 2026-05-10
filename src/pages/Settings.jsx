@@ -1,6 +1,7 @@
 import { useState } from "react";
 import QuotesSettings from "./QuotesSettings";
 import FeaturedContentSettings from "./FeaturedContentSettings";
+import ScreenshotSettings from "./ScreenshotSettings";
 
 export default function Settings() {
 
@@ -29,8 +30,6 @@ export default function Settings() {
           Quotes
         </button>
 
-        {/* NEW TAB */}
-
         <button
           onClick={() => setActiveTab("featured")}
           className={`px-4 py-2 rounded ${
@@ -40,6 +39,18 @@ export default function Settings() {
           }`}
         >
           Featured Content
+        </button>
+
+        {/* NEW TAB */}
+        <button
+          onClick={() => setActiveTab("screenshot")}
+          className={`px-4 py-2 rounded ${
+            activeTab === "screenshot"
+              ? "bg-indigo-600 text-white"
+              : "bg-white border"
+          }`}
+        >
+          Screenshot Access
         </button>
 
       </div>
@@ -52,6 +63,10 @@ export default function Settings() {
 
       {activeTab === "featured" && (
         <FeaturedContentSettings />
+      )}
+
+      {activeTab === "screenshot" && (
+        <ScreenshotSettings />
       )}
 
     </div>
