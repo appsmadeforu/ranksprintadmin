@@ -21,6 +21,8 @@ import NotificationManager from "./pages/NotificationManager";
 import ActivityLogs from "./pages/ActivityLogs";
 import PyqsPage from "./pages/PyqsPage";
 import Settings from "./pages/Settings";
+import UserStaticData from "./pages/UserStaticData";
+import ReportFromUsers from "./pages/ReportFromUsers";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -56,12 +58,18 @@ export default function App() {
         <Route path="activity-logs" element={<ActivityLogs />} />
         <Route path="pyqs" element={<PyqsPage />} />
         <Route path="settings" element={<Settings />} />
-
+        <Route path="reports-from-users" element={<ReportFromUsers />} />
         {/* 👑 Super Admin Only */}
         <Route path="admins" element={<AdminManager />} />
-
-        {/* Test Editor */}
         <Route path="exams/:examId/tests/:testId" element={<TestEditor />} />
+        <Route
+          path="/admin/static-data"
+          element={
+            <ProtectedRoute requiredPermission="staticData">
+              <UserStaticData />
+            </ProtectedRoute>
+          }
+        />
       </Route>
 
     </Routes>

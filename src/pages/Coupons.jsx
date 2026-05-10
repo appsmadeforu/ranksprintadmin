@@ -24,6 +24,7 @@ export default function Coupons() {
 
   const [users, setUsers] = useState([]);
   const [userGroups, setUserGroups] = useState([]);
+  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
 
   const [formData, setFormData] = useState({
     code: "",
@@ -36,7 +37,8 @@ export default function Coupons() {
     isActive: true,
     userType: "all",
     userIds: [],
-    userGroupIds: []
+    userGroupIds: [],
+    subscriptionPlanIds: []   // ✅ ADD THIS
   });
 
   /* ---------------- FETCH COUPONS ---------------- */
@@ -85,6 +87,20 @@ export default function Coupons() {
     );
   }, []);
 
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "subscriptionPlans"),
+      snap => {
+        setSubscriptionPlans(
+          snap.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+          }))
+        );
+      }
+    );
+  }, []);
+
   /* ---------------- SEARCH ---------------- */
   const filteredCoupons = useMemo(() => {
     let data = [...coupons];
@@ -116,6 +132,10 @@ export default function Coupons() {
       usageLimit: 1,
       usedCount: 0,
       isActive: true,
+      userType: "all",
+      userIds: [],
+      userGroupIds: [],
+      subscriptionPlanIds: []   // ✅ ADD
     });
     setEditingCoupon(null);
     setShowModal(false);
@@ -144,6 +164,17 @@ export default function Coupons() {
           id => id !== groupId
         )
         : [...formData.userGroupIds, groupId]
+    });
+  };
+
+  const togglePlan = (planId) => {
+    const exists = formData.subscriptionPlanIds.includes(planId);
+
+    setFormData({
+      ...formData,
+      subscriptionPlanIds: exists
+        ? formData.subscriptionPlanIds.filter(id => id !== planId)
+        : [...formData.subscriptionPlanIds, planId]
     });
   };
 
@@ -381,6 +412,7 @@ export default function Coupons() {
                       setEditingCoupon(coupon);
                       setFormData({
                         ...coupon,
+                        subscriptionPlanIds: coupon.subscriptionPlanIds || [], // ✅ FIX
                         validFrom: coupon.validFrom
                           ? coupon.validFrom.toDate().toISOString().split("T")[0]
                           : "",
@@ -733,6 +765,39 @@ export default function Coupons() {
                   />
                   Activate Coupon
                 </label>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-2">
+                  Subscription Plans
+                </label>
+
+                <div className="max-h-40 overflow-y-auto border p-3 rounded bg-slate-50">
+
+                  {subscriptionPlans.map(plan => (
+
+                    <label
+                      key={plan.id}
+                      className="flex items-center gap-2 mb-2"
+                    >
+
+                      <input
+                        type="checkbox"
+                        checked={
+                          formData.subscriptionPlanIds.includes(plan.id)
+                        }
+                        onChange={() => togglePlan(plan.id)}
+                      />
+
+                      <span>
+                        {plan.name}
+                      </span>
+
+                    </label>
+
+                  ))}
+
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">

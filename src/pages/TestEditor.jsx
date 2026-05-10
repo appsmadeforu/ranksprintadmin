@@ -191,67 +191,39 @@ export default function TestEditor() {
       let finalUsers = [];
 
       if (formData.userType === "all") {
-
-        finalUsers =
-          users.map(u => u.id);
-
+        finalUsers = users.map(u => u.id);
       }
 
       if (formData.userType === "specific") {
-
-        finalUsers =
-          formData.userIds;
-
+        finalUsers = formData.userIds;
       }
 
       if (formData.userType === "groups") {
-
         formData.userGroupIds.forEach(groupId => {
-
-          const group =
-            userGroups.find(
-              g => g.id === groupId
-            );
-
+          const group = userGroups.find(g => g.id === groupId);
           if (group?.userIds) {
-
-            finalUsers.push(
-              ...group.userIds
-            );
-
+            finalUsers.push(...group.userIds);
           }
-
         });
-
       }
 
-      finalUsers =
-        [...new Set(finalUsers)];
+      finalUsers = [...new Set(finalUsers)];
 
       /* -------- PAYLOAD -------- */
 
       const payload = {
-
         ...formData,
-
         userIds: finalUsers,
-
         visibilityStart:
           formData.visibilityStart
             ? new Date(formData.visibilityStart)
             : null,
-
         visibilityEnd:
           formData.visibilityEnd
             ? new Date(formData.visibilityEnd)
             : null,
-
-        createdBy:
-          auth.currentUser?.uid || "admin",
-
-        updatedAt:
-          serverTimestamp()
-
+        createdBy: auth.currentUser?.uid || "admin",
+        updatedAt: serverTimestamp()
       };
 
       if (isNew) {
@@ -260,7 +232,6 @@ export default function TestEditor() {
           createdAt: serverTimestamp(),
         });
 
-        // ✅ LOG CREATE
         await logActivity({
           actionType: "CREATE_TEST",
           description: `Created test: ${formData.name}`,
@@ -271,7 +242,6 @@ export default function TestEditor() {
       } else {
         await updateDoc(refDoc, payload);
 
-        // ✅ LOG UPDATE
         await logActivity({
           actionType: "UPDATE_TEST",
           description: `Updated test: ${formData.name}`,
@@ -281,7 +251,9 @@ export default function TestEditor() {
       }
 
       Swal.fire("Success", "Test saved successfully", "success");
-      navigate("/admin/tests");
+
+      // ✅ CHANGED: Navigate to Tests page with examId preserved
+      navigate(`/admin/tests?exam=${examId}`);
 
     } catch (err) {
       Swal.fire("Error", err.message, "error");
