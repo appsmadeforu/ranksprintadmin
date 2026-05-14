@@ -26,6 +26,10 @@ export default function UserStaticData() {
   const [sourceInput, setSourceInput] = useState("");
   const [showSourceInput, setShowSourceInput] = useState(false);
 
+  const [boards, setBoards] = useState([]);
+  const [boardInput, setBoardInput] = useState("");
+  const [showBoardInput, setShowBoardInput] = useState(false);
+
   const [initialData, setInitialData] = useState(null);
 
   /* ---------------- FETCH STATIC DATA ---------------- */
@@ -38,6 +42,7 @@ export default function UserStaticData() {
           setMediums(snap.data().mediums || []);
           setClasses(snap.data().classes || []);
           setSources(snap.data().sources || []);
+          setBoards(snap.data().boards || []);
           setInitialData(snap.data());
         }
         setLoading(false);
@@ -117,6 +122,23 @@ export default function UserStaticData() {
     setSources(sources.filter(s => s !== source));
   };
 
+  /* ============ BOARDS ============ */
+  const handleAddBoard = () => {
+    if (!boardInput.trim()) {
+      alert("Please enter education board");
+      return;
+    }
+    if (!boards.includes(boardInput)) {
+      setBoards([...boards, boardInput]);
+      setBoardInput("");
+      setShowBoardInput(false);
+    }
+  };
+
+  const handleRemoveBoard = (board) => {
+    setBoards(boards.filter(b => b !== board));
+  };
+
   /* ============ BULK UPLOAD ============ */
   const handleBulkUpload = async (e, type) => {
     const file = e.target.files?.[0];
@@ -138,7 +160,8 @@ export default function UserStaticData() {
         schools: "Schools",
         mediums: "Mediums",
         classes: "Classes/Grades",
-        sources: "How Did You Know About App (Sources)"
+        sources: "How Did You Know About App (Sources)",
+        boards: "Education Board"
       };
 
       // Extract non-empty values from first column, skip header row
@@ -168,6 +191,9 @@ export default function UserStaticData() {
       } else if (type === "sources") {
         setSources([...new Set([...sources, ...newItems])]);
         Swal.fire("Success", `Added ${newItems.length} sources`, "success");
+      } else if (type === "boards") {
+        setBoards([...new Set([...boards, ...newItems])]);
+        Swal.fire("Success", `Added ${newItems.length} boards`, "success");
       }
 
       // Reset file input
@@ -194,6 +220,9 @@ export default function UserStaticData() {
     } else if (type === "sources") {
       data = sources.length > 0 ? sources : ["Via LinkedIn", "Via Friend", "Via Family", "Via Social Media"];
       filename = "sources_template.xlsx";
+    } else if (type === "boards") {
+      data = boards.length > 0 ? boards : ["CBSE", "ICSE", "State Board", "IB"];
+      filename = "boards_template.xlsx";
     }
 
     const worksheet = XLSX.utils.aoa_to_sheet(data.map(item => [item]));
@@ -212,6 +241,7 @@ export default function UserStaticData() {
         mediums,
         classes,
         sources,
+        boards,
         updatedAt: serverTimestamp()
       });
 
@@ -223,7 +253,7 @@ export default function UserStaticData() {
       });
 
       Swal.fire("Success", "Static data saved successfully", "success");
-      setInitialData({ schools, mediums, classes, sources });
+      setInitialData({ schools, mediums, classes, sources, boards });
     } catch (err) {
       Swal.fire("Error", "Failed to save: " + err.message, "error");
     } finally {
@@ -238,6 +268,7 @@ export default function UserStaticData() {
       setMediums(initialData.mediums || []);
       setClasses(initialData.classes || []);
       setSources(initialData.sources || []);
+      setBoards(initialData.boards || []);
     }
   };
 
@@ -587,10 +618,115 @@ export default function UserStaticData() {
 
       </div>
 
+      {/* ============ EDUCATION BOARDS ============ */}
+      <div className="bg-white p-6 rounded-xl shadow">
+
+        <h3 className="text-lg font-semibold mb-4">
+          Education Boards
+        </h3>
+
+        <p className="text-sm text-gray-600 mb-4">
+          Add education boards available for users to choose from.
+        </p>
+
+        <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+
+          {boards.map((board, idx) => (
+
+            <div
+              key={idx}
+              className="flex justify-between items-center bg-slate-50 p-3 rounded border"
+            >
+
+              <span>{board}</span>
+
+              <button
+                onClick={() => handleRemoveBoard(board)}
+                className="text-red-600 hover:text-red-800"
+              >
+                <X size={18} />
+              </button>
+
+            </div>
+
+          ))}
+
+        </div>
+
+        {!showBoardInput ? (
+
+          <div className="flex gap-2">
+
+            <button
+              onClick={() => setShowBoardInput(true)}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-medium"
+            >
+              + Add Board
+            </button>
+
+            <button
+              onClick={() => downloadTemplate("boards")}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+            >
+              Download Template
+            </button>
+
+            <label className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-medium cursor-pointer flex items-center justify-center gap-2">
+
+              <Upload size={18} />
+
+              Upload Excel
+
+              <input
+                type="file"
+                accept=".xlsx, .xls"
+                onChange={(e) => handleBulkUpload(e, "boards")}
+                className="hidden"
+              />
+
+            </label>
+
+          </div>
+
+        ) : (
+
+          <div className="flex gap-2">
+
+            <input
+              type="text"
+              placeholder="Enter board (e.g., CBSE, ICSE)"
+              value={boardInput}
+              onChange={(e) => setBoardInput(e.target.value)}
+              onKeyPress={(e) =>
+                e.key === "Enter" && handleAddBoard()
+              }
+              className="flex-1 border p-2 rounded focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              autoFocus
+            />
+
+            <button
+              onClick={handleAddBoard}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium"
+            >
+              Add
+            </button>
+            <button
+              onClick={() => {
+                setShowBoardInput(false);
+                setBoardInput("");
+              }}
+              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* INFO BOX */}
       <div className="mt-8 bg-blue-50 border border-blue-200 p-4 rounded-lg">
         <p className="text-sm text-blue-800">
-          <strong>ℹ️ Note:</strong> These settings define the options available to users in the mobile app. 
+          <strong>ℹ️ Note:</strong> These settings define the options available to users in the mobile app.
           You can add, edit, or remove Schools, Mediums, Classes, and Sources as needed.
         </p>
       </div>
